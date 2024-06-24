@@ -25,23 +25,38 @@ async def on_message(message):
 
     if message.channel.id == tts_channel_id:
         api.tts(message.content)
-        # Join the user's voice channel
+        # Check if the bot is already connected to a voice channel in the server
+        voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
+        
         if message.author.voice:
             vc = message.author.voice.channel
-            if vc:
+            if not voice_client:
                 voice_client = await vc.connect()
-                # Create FFmpegPCMAudio instance and play it
-                if os.path.exists("output.mp3"):  # Make sure the file exists
-                    audio_source = FFmpegPCMAudio("output.mp3")
-                    if not voice_client.is_playing():
-                        voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
-                    else:
-                        await message.channel.send("Already playing audio.")
+            elif voice_client.channel != vc:
+                await voice_client.move_to(vc)
+            
+            # Create FFmpegPCMAudio instance and play it
+            if os.path.exists("output.mp3"):  # Make sure the file exists
+                audio_source = FFmpegPCMAudio("output.mp3")
+                if not voice_client.is_playing():
+                    voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
                 else:
-                    await message.channel.send("Audio file not found.")
+                    await message.channel.send("Already playing audio.")
             else:
-                await message.channel.send("You are not in a voice channel.")
+                await message.channel.send("Audio file not found.")
         else:
-            await message.channel.send("You need to be in a voice channel to use this command.")
+            await message.channel.send("You are not in a voice channel.")
+
+@client.event
+async def on_voice_state_update(member, before, after):
+    if member == client.user and before.channel and not after.channel:
+        # This means the bot has left the voice channel, possibly to join another or disconnected.
+        return
+
+    # If the bot is the only member in the voice channel, disconnect.
+    if after.channel and client.user in [member for member in after.channel.members]:
+        voice_client = discord.utils.get(client.voice_clients, guild=member.guild)
+        if voice_client and len(after.channel.members) == 1:  # Only the bot is in the channel
+            await voice_client.disconnect()
 
 client.run(TOKEN)
