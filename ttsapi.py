@@ -12,7 +12,7 @@ def tts(text_block):
 
     voice = texttospeech.VoiceSelectionParams(
         language_code="en-US",
-        name="en-US-Studio-O"
+        name="en-US-Standard-F"
     )
 
     audio_config = texttospeech.AudioConfig(
