@@ -22,7 +22,15 @@ async def on_ready():
 async def on_message(message):
     if message.author == client.user or not message.guild:
         return
-
+    if message.content == "$stop":
+        voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
+        if voice_client and voice_client.is_playing():
+            voice_client.stop()
+            await message.channel.send("Stopped playing audio.")
+        else:
+            await message.channel.send("Not currently playing audio.")
+        return  # Return to prevent further processing
+    
     if message.channel.id == tts_channel_id:
         api.tts(message.content)
         # Check if the bot is already connected to a voice channel in the server
