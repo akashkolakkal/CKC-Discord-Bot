@@ -1,9 +1,10 @@
 # bot.py
 import os
-from google.cloud import texttospeech
 import discord
 from dotenv import load_dotenv
 import ttsapi as api
+from discord import FFmpegPCMAudio
+
 
 load_dotenv()
 TOKEN = os.getenv('TOKEN')
@@ -27,17 +28,20 @@ async def on_message(message):
         # Join the user's voice channel
         if message.author.voice:
             vc = message.author.voice.channel
-            voice_client = await vc.connect()
-
-            # Play the 'output.mp3' file
-            voice_client.play(discord.FFmpegPCMAudio('output.mp3'), after=lambda e: print('done', e))
-
-            # Wait for the audio to play before disconnecting
-            while voice_client.is_playing():
-                pass
-
-            await voice_client.disconnect()
+            if vc:
+                voice_client = await vc.connect()
+                # Create FFmpegPCMAudio instance and play it
+                if os.path.exists("output.mp3"):  # Make sure the file exists
+                    audio_source = FFmpegPCMAudio("output.mp3")
+                    if not voice_client.is_playing():
+                        voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
+                    else:
+                        await message.channel.send("Already playing audio.")
+                else:
+                    await message.channel.send("Audio file not found.")
+            else:
+                await message.channel.send("You are not in a voice channel.")
         else:
-            await message.channel.send("You are not in a voice channel.")
+            await message.channel.send("You need to be in a voice channel to use this command.")
 
 client.run(TOKEN)
