@@ -1,27 +1,44 @@
-# bot.py
 import os
 import discord
 from dotenv import load_dotenv
-import ttsapi as api
+import ttsapi as api  # Assuming this is a custom module for text-to-speech
 from discord import FFmpegPCMAudio
-
+import asyncio
+from datetime import datetime, timedelta
 
 load_dotenv()
 TOKEN = os.getenv('TOKEN')
 tts_channel_id = 1254793464269504696
+daily_limit = 1250000  # Daily character limit
+usage = 0  # Initialize usage counter
+max_message_length = 50  # Max characters allowed in a single message
 
 intents = discord.Intents.default() 
 intents.message_content = True
 client = discord.Client(intents=intents)
 
+async def reset_usage():
+    global usage
+    while True:
+        now = datetime.now()
+        next_reset = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        sleep_time = (next_reset - now).total_seconds()
+        await asyncio.sleep(sleep_time)
+        usage = 0
+        print("Usage counter reset.")
+
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
+    client.loop.create_task(reset_usage())
 
 @client.event
 async def on_message(message):
+    global usage
+
     if message.author == client.user or not message.guild:
         return
+
     if message.content == "$stop":
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
         if voice_client and voice_client.is_playing():
@@ -32,6 +49,17 @@ async def on_message(message):
         return  # Return to prevent further processing
     
     if message.channel.id == tts_channel_id:
+        message_length = len(message.content)
+        
+        if message_length > max_message_length:
+            await message.channel.send("Message is too long. Please limit your message to 50 characters.")
+            return
+        
+        if usage + message_length > daily_limit:
+            await message.channel.send("Daily character limit reached. Try again tomorrow.")
+            return
+        
+        usage += message_length
         api.tts(message.content)
         # Check if the bot is already connected to a voice channel in the server
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
