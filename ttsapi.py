@@ -4,7 +4,7 @@ import os
 text_block= "fuck you"
 
 def tts(text_block):
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'ckc-tts-bot-28b03e81ae46.json'
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'credentials.json'
 
     client = texttospeech.TextToSpeechClient()
 
