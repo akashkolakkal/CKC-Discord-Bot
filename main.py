@@ -5,19 +5,37 @@ import ttsapi as api
 from discord import FFmpegPCMAudio
 import asyncio
 from datetime import datetime, timedelta
+import json
 
 load_dotenv()
 
 TOKEN = os.getenv('TOKEN')
 tts_channel_id = 1254793464269504696
 daily_limit = 1250000  
-usage = 0  
 max_message_length = 50  
-disconnect_time = 10  
+disconnect_time = 120  # 2 minutes
+
+usage_file = 'usage.json'
 
 intents = discord.Intents.default() 
 intents.message_content = True
 client = discord.Client(intents=intents)
+
+def read_usage():
+    if os.path.exists(usage_file):
+        with open(usage_file, 'r') as file:
+            data = json.load(file)
+            return data.get('usage', 0)
+    else:
+        # Create the file with initial usage of 0 if it doesn't exist
+        write_usage(0)
+        return 0
+
+def write_usage(usage):
+    with open(usage_file, 'w') as file:
+        json.dump({'usage': usage}, file)
+
+usage = read_usage()
 
 async def reset_usage():
     global usage
@@ -27,6 +45,7 @@ async def reset_usage():
         sleep_time = (next_reset - now).total_seconds()
         await asyncio.sleep(sleep_time)
         usage = 0
+        write_usage(usage)
         print("Usage counter reset.")
 
 async def check_disconnect():
@@ -61,6 +80,11 @@ async def on_message(message):
             await message.channel.send("Not currently playing audio.")
         return  
     
+    if message.content == "$limit":
+        remaining_limit = daily_limit - usage
+        await message.channel.send(f"Remaining character limit for today: {remaining_limit}")
+        return
+
     if message.channel.id == tts_channel_id:
         message_length = len(message.content)
         
@@ -73,6 +97,7 @@ async def on_message(message):
             return
         
         usage += message_length
+        write_usage(usage)
         api.tts(message.content)
         # Check if the bot is already connected to a voice channel in the server
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
@@ -99,13 +124,11 @@ async def on_message(message):
 @client.event
 async def on_voice_state_update(member, before, after):
     if member == client.user and before.channel and not after.channel:
-        # This means the bot has left the voice channel, possibly to join another or disconnected.
         return
 
-    # If the bot is the only member in the voice channel, disconnect.
     if after.channel and client.user in [member for member in after.channel.members]:
         voice_client = discord.utils.get(client.voice_clients, guild=member.guild)
-        if voice_client and len(after.channel.members) == 1:  # Only the bot is in the channel
+        if voice_client and len(after.channel.members) == 1:
             await voice_client.disconnect()
 
 client.run(TOKEN)

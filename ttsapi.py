@@ -1,8 +1,6 @@
 from google.cloud import texttospeech
 import os
 
-text_block= "fuck you"
-
 def tts(text_block):
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'credentials.json'
 
@@ -31,5 +29,3 @@ def tts(text_block):
     with open("output.mp3", "wb") as out:
         out.write(response.audio_content)
         print("Audio content written to file 'output.mp3'")
-
-tts(text_block)
