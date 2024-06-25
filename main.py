@@ -12,7 +12,7 @@ tts_channel_id = 1254793464269504696
 daily_limit = 1250000  
 usage = 0  
 max_message_length = 50  
-disconnect_time = 120  
+disconnect_time = 10  
 
 intents = discord.Intents.default() 
 intents.message_content = True
