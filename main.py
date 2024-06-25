@@ -1,7 +1,7 @@
 import os
 import discord
 from dotenv import load_dotenv
-import ttsapi as api  # Assuming this is a custom module for text-to-speech
+import ttsapi as api 
 from discord import FFmpegPCMAudio
 import asyncio
 from datetime import datetime, timedelta
@@ -9,9 +9,10 @@ from datetime import datetime, timedelta
 load_dotenv()
 TOKEN = os.getenv('TOKEN')
 tts_channel_id = 1254793464269504696
-daily_limit = 1250000  # Daily character limit
-usage = 0  # Initialize usage counter
-max_message_length = 50  # Max characters allowed in a single message
+daily_limit = 1250000  
+usage = 0  
+max_message_length = 50  
+disconnect_time = 120  
 
 intents = discord.Intents.default() 
 intents.message_content = True
@@ -27,10 +28,21 @@ async def reset_usage():
         usage = 0
         print("Usage counter reset.")
 
+async def check_disconnect():
+    while True:
+        await asyncio.sleep(10) 
+        for voice_client in client.voice_clients:
+            if len(voice_client.channel.members) == 1:  
+                await asyncio.sleep(disconnect_time)
+                if len(voice_client.channel.members) == 1:
+                    await voice_client.disconnect()
+                    print(f"Disconnected from {voice_client.channel} due to inactivity.")
+
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
     client.loop.create_task(reset_usage())
+    client.loop.create_task(check_disconnect())
 
 @client.event
 async def on_message(message):
@@ -46,7 +58,7 @@ async def on_message(message):
             await message.channel.send("Stopped playing audio.")
         else:
             await message.channel.send("Not currently playing audio.")
-        return  # Return to prevent further processing
+        return  
     
     if message.channel.id == tts_channel_id:
         message_length = len(message.content)
@@ -72,7 +84,7 @@ async def on_message(message):
                 await voice_client.move_to(vc)
             
             # Create FFmpegPCMAudio instance and play it
-            if os.path.exists("output.mp3"):  # Make sure the file exists
+            if os.path.exists("output.mp3"): 
                 audio_source = FFmpegPCMAudio("output.mp3")
                 if not voice_client.is_playing():
                     voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
