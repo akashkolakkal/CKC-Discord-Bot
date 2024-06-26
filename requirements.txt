@@ -2,3 +2,6 @@ discord.py
 python-dotenv
 google-cloud-texttospeech
 PyNaCl
+google-auth
+xds-protos
+Flask
