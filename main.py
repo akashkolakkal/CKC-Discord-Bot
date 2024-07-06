@@ -6,14 +6,13 @@ from discord import FFmpegPCMAudio
 import asyncio
 from datetime import datetime, timedelta
 import json
-from keep_alive import keep_alive 
 
 load_dotenv()
 discord.opus.load_opus("opus/libopus.so")
 
 TOKEN = os.getenv('TOKEN')
 tts_channel_id_1 = 1254793464269504696 
-tts_channel_id_2 = 982286475045527552
+tts_channel_id_2 = 982286475045527552 
 daily_limit = 1250000  
 max_message_length = 200 
 disconnect_time = 2  # 2 seconds
@@ -74,7 +73,6 @@ async def on_message(message):
     if message.author == client.user or not message.guild:
         return
 
-
     if message.content == "$stop":
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
         if voice_client and voice_client.is_playing():
@@ -83,13 +81,13 @@ async def on_message(message):
         else:
             await message.channel.send("Not currently playing audio.")
         return  
-    
+
     if message.content == "$limit":
         remaining_limit = daily_limit - usage
         await message.channel.send(f"Remaining character limit for today: {remaining_limit}")
         return
 
-    if message.channel.id == tts_channel_id_1 or     tts_channel_id_2 :
+    if message.channel.id == tts_channel_id_1 or message.channel.id == tts_channel_id_2:
         message_length = len(message.content)
         
         if message_length > max_message_length:
@@ -103,7 +101,7 @@ async def on_message(message):
         usage += message_length
         write_usage(usage)
         api.tts(message.content)
-        # Check if the bot is already connected to a voice channel in the server
+
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
         
         if message.author.voice:
@@ -113,7 +111,6 @@ async def on_message(message):
             elif voice_client.channel != vc:
                 await voice_client.move_to(vc)
             
-            # Create FFmpegPCMAudio instance and play it
             if os.path.exists("output.mp3"): 
                 audio_source = FFmpegPCMAudio("output.mp3")
                 if not voice_client.is_playing():
@@ -124,6 +121,8 @@ async def on_message(message):
                 await message.channel.send("Audio file not found.")
         else:
             await message.channel.send("You are not in a voice channel.")
+    else:
+        await message.channel.send("You are not in a TTS channel.")
 
 @client.event
 async def on_voice_state_update(member, before, after):
@@ -134,5 +133,4 @@ async def on_voice_state_update(member, before, after):
         voice_client = discord.utils.get(client.voice_clients, guild=member.guild)
         if voice_client and len(after.channel.members) == 1:
             await voice_client.disconnect()
-keep_alive()
 client.run(TOKEN)
