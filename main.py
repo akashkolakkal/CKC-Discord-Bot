@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import json
 
 load_dotenv()
-discord.opus.load_opus("opus/libopus.so")
 
 TOKEN = os.getenv('TOKEN')
 tts_channel_id_1 = 1254793464269504696 
