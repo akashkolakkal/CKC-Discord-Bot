@@ -86,42 +86,43 @@ async def on_message(message):
         await message.channel.send(f"Remaining character limit for today: {remaining_limit}")
         return
 
-    if message.channel.id == tts_channel_id_1 or message.channel.id == tts_channel_id_2:
-        message_length = len(message.content)
-        
-        if message_length > max_message_length:
-            await message.channel.send("Message is too long. Please limit your message to 200 characters.")
-            return
-        
-        if usage + message_length > daily_limit:
-            await message.channel.send("Daily character limit reached. Try again tomorrow.")
-            return
-        
-        usage += message_length
-        write_usage(usage)
-        api.tts(message.content)
+    # Check if the message is in a TTS channel before processing further
+    if message.channel.id not in [tts_channel_id_1, tts_channel_id_2]:
+        return
 
-        voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
+    message_length = len(message.content)
+    
+    if message_length > max_message_length:
+        await message.channel.send("Message is too long. Please limit your message to 200 characters.")
+        return
+    
+    if usage + message_length > daily_limit:
+        await message.channel.send("Daily character limit reached. Try again tomorrow.")
+        return
+    
+    usage += message_length
+    write_usage(usage)
+    api.tts(message.content)
+
+    voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
+    
+    if message.author.voice:
+        vc = message.author.voice.channel
+        if not voice_client:
+            voice_client = await vc.connect()
+        elif voice_client.channel != vc:
+            await voice_client.move_to(vc)
         
-        if message.author.voice:
-            vc = message.author.voice.channel
-            if not voice_client:
-                voice_client = await vc.connect()
-            elif voice_client.channel != vc:
-                await voice_client.move_to(vc)
-            
-            if os.path.exists("output.mp3"): 
-                audio_source = FFmpegPCMAudio("output.mp3")
-                if not voice_client.is_playing():
-                    voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
-                else:
-                    await message.channel.send("Already playing audio.")
+        if os.path.exists("output.mp3"): 
+            audio_source = FFmpegPCMAudio("output.mp3")
+            if not voice_client.is_playing():
+                voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
             else:
-                await message.channel.send("Audio file not found.")
+                await message.channel.send("Already playing audio.")
         else:
-            await message.channel.send("You are not in a voice channel.")
+            await message.channel.send("Audio file not found.")
     else:
-        await message.channel.send("You are not in a TTS channel.")
+        await message.channel.send("You are not in a voice channel.")
 
 @client.event
 async def on_voice_state_update(member, before, after):
