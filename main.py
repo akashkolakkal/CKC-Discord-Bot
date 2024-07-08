@@ -10,8 +10,6 @@ import json
 load_dotenv()
 
 TOKEN = os.getenv('TOKEN')
-tts_channel_id_1 = 1254793464269504696 
-tts_channel_id_2 = 982286475045527552 
 daily_limit = 1250000  
 max_message_length = 200 
 disconnect_time = 2  # 2 seconds
@@ -22,6 +20,11 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
+@client.event
+async def on_guild_join(guild):
+    await guild.system_channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n\nUse the $setttschannel command to set the TTS channel for your server.\nexample: $setttschannel=<textchannelid> \n\nUse the $limit command to check the remaining character limit for the day. \n\nUse the $stop command to stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+
+    
 def read_usage():
     if os.path.exists(usage_file):
         with open(usage_file, 'r') as file:
@@ -71,6 +74,40 @@ async def on_message(message):
 
     if message.author == client.user or not message.guild:
         return
+    
+    if message.content == '$help':
+        await message.channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n$setttschannel=<textchannelid> - Set the TTS channel for your server. \n$limit - Check the remaining character limit for the day. \n$stop - Stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+        return
+
+    if message.content.startswith('$setttschannel='):
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send("You must be an administrator to use this command.")
+            return
+        channel_id = message.content.split('=')[1]
+        try:
+            channel = client.get_channel(int(channel_id))
+            if channel:
+                # Load or initialize the JSON file
+                tts_channels_file = 'tts_channels.json'
+                if not os.path.exists(tts_channels_file):
+                    with open(tts_channels_file, 'w') as file:
+                        json.dump({}, file)
+                
+                with open(tts_channels_file, 'r') as file:
+                    tts_channels = json.load(file)
+                
+                # Update the channel ID for the server
+                tts_channels[str(message.guild.id)] = int(channel_id)
+                
+                # Save the updated JSON
+                with open(tts_channels_file, 'w') as file:
+                    json.dump(tts_channels, file)
+                
+                await message.channel.send(f"TTS channel set to {channel.mention}")
+            else:
+                await message.channel.send("Invalid channel ID.")
+        except ValueError:
+            await message.channel.send("Invalid channel ID.")
 
     if message.content == "$stop":
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
@@ -86,8 +123,13 @@ async def on_message(message):
         await message.channel.send(f"Remaining character limit for today: {remaining_limit}")
         return
 
+    with open('tts_channels.json', 'r') as file:
+                tts_channels = json.load(file)         
+    # Check if the server's ID is in the JSON and get the channel ID
+    tts_channel_id = tts_channels.get(str(message.guild.id))
+
     # Check if the message is in a TTS channel before processing further
-    if message.channel.id not in [tts_channel_id_1, tts_channel_id_2]:
+    if message.channel.id != tts_channel_id:
         return
 
     message_length = len(message.content)
