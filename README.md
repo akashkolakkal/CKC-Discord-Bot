@@ -4,11 +4,11 @@ A Simple text-to-speech bot with a few commands.
 ## Table of Contents
 
 - [Setup and Installation](#setup-and-installation)
-- [Getting Text-to-Speech API Key](#getting_text-to-speech_api_key)
-- [Setting up the .env file](#setting_up_the_.env_file)
-- [Installing the required dependencies](#installing_the_required_dependencies)
-- [Installing FFmpeg](#installing_FFmpeg)
-- [Running the bot](#running_the_bot)
+- [Getting Text-to-Speech API Key](#getting-text-to-speech-api-key)
+- [Setting up the .env file](#setting-up-the-env-file)
+- [Installing the required dependencies](#installing-the-required-dependencies)
+- [Installing FFmpeg](#installing-ffmpeg)
+- [Running the bot](#running-the-bot)
 - [Commands](#commands)
 
 ## Setup and Installation 
@@ -27,7 +27,7 @@ You will need to create a google cloud account and make a project for this bot, 
 Create a service account for the API and go to *Credentials > KEYS > Create new KEY*  
 A .json file would be downloaded on your device which contains the Credentials for you tts API.
 
-## Setting up the .env file
+## Setting up the '.env' file
 We have to copy the Values of the following attributed in the JSON file and create a .env file in the root directory of the project and paste the values in the following format:
     
     TOKEN=<discord_bot_token>
