@@ -1,8 +1,21 @@
 # CKC-Discord-Bot
 A Simple text-to-speech bot with a few commands.
-## Setup and Installation
+
+## Table of Contents
+
+- [Setup and Installation](#setup-and-installation)
+- [Getting Text-to-Speech API Key](#getting_text-to-speech_api_key)
+- [Setting up the .env file](#setting_up_the_.env_file)
+- [Installing the required dependencies](#installing_the_required_dependencies)
+- [Installing FFmpeg](#installing_FFmpeg)
+- [Running the bot](#running_the_bot)
+- [Commands](#commands)
+
+## Setup and Installation 
 
 This is a self-hosted bot which one can be hosted on any Linux/Windows Machines with their respective methods
+
+
 ## Getting Text-to-Speech API Key
 This bot uses the **Google text-to-speech API** for speech generation.
 You can choose from one of the basic voice options covered in the free tier.
@@ -65,3 +78,15 @@ After setting up the .env file and installing the dependencies, you can run the 
 ### Windows:
     python main.py
 
+## Commands
+
+### The bot has the following commands:
+
+**$help** - lists all the available commands
+
+**$setttschannel=<channel_id>** - sets the text-to-speech channel  
+this command can only be used by the server admins
+
+**$limit** - shows the current character limit for the text-to-speech bot
+
+**$stop** - stops the text-to-speech bot mid sentence
