@@ -13,7 +13,7 @@ A Simple text-to-speech bot with a few commands.
 
 ## Setup and Installation 
 
-This is a self-hosted bot which one can be hosted on any Linux/Windows Machines with their respective methods
+This is a self-hosted bot which one can be hosted on any Linux/Windows Machine with their respective methods
 
 
 ## Getting Text-to-Speech API Key
