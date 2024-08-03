@@ -3,3 +3,4 @@ output.mp3
 .env
 usage.json
 tts_channels.json
+/output
