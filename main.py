@@ -2,7 +2,7 @@ import os
 import discord
 from dotenv import load_dotenv
 import ttsapi as api 
-from discord import FFmpegPCMAudio
+from discord import FFmpegPCMAudio, app_commands
 import asyncio
 from datetime import datetime, timedelta
 import json
@@ -19,6 +19,8 @@ usage_file = 'usage.json'
 intents = discord.Intents.default() 
 intents.message_content = True
 client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
+
 
 @client.event
 async def on_guild_join(guild):
@@ -62,11 +64,19 @@ async def check_disconnect():
                     await voice_client.disconnect()
                     print(f"Disconnected from {voice_client.channel} due to inactivity.")
 
+@tree.command(
+    name="devbadge",
+    description="test devvadge slash command",
+)
+async def first_command(interaction):
+    await interaction.response.send_message("Hello!")
+
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
     client.loop.create_task(reset_usage())
     client.loop.create_task(check_disconnect())
+    await tree.sync()
 
 @client.event
 async def on_message(message):
