@@ -32,4 +32,5 @@ jobs:
 
     - name: Reboot system
       run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.GCP_USERNAME }}@${{ secrets.GCP_VM_IP }} "sudo reboot"
+        ssh -o StrictHostKeyChecking=no ${{ secrets.GCP_USERNAME }}@${{ secrets.GCP_VM_IP }} "sudo reboot" || echo "Reboot initiated"
+      continue-on-error: true
