@@ -85,18 +85,100 @@ async def check_disconnect():
                     print(f"Disconnected from {voice_client.channel} due to inactivity.")
 
 @tree.command(
-    name="devbadge",
-    description="test devvadge slash command",
+    name='sync', 
+    description='Owner only'
+)
+async def sync(interaction: discord.Interaction):
+    if interaction.user.id == 909786287614099486 or 691224924915761182:
+        await tree.sync()
+        await interaction.response.send_message('Command tree synced.')
+    else:
+        await interaction.response.send_message('You must be the owner to use this command!')
+
+@tree.command(
+    name="help",
+    description="Find instructions on how to use the bot here",
 )
 async def first_command(interaction):
-    await interaction.response.send_message("Hello!")
+    await interaction.response.send_message("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n$setttschannel=<textchannelid> - Set the TTS channel for your server. \n$limit - Check the remaining character limit for the day. \n$stop - Stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+
+@tree.command(
+    name="stop",
+    description="Stop playing audio"
+)
+async def stop(interaction: discord.Interaction):
+    voice_client = discord.utils.get(client.voice_clients, guild=interaction.guild)
+    
+    if voice_client and voice_client.is_playing():
+        voice_client.stop()
+        await interaction.response.send_message("Stopped playing audio.", ephemeral=True)
+    else:
+        await interaction.response.send_message("Not currently playing audio.", ephemeral=True)
+
+@tree.command(
+    name="limit",
+    description="Know the daily limit"
+)
+async def limit(interaction: discord.Interaction):
+    remaining_limit = daily_limit - usage
+    await interaction.response.send_message(f"Remaining character limit for today: {remaining_limit}")
+
+@tree.command(
+    name="settts",
+    description="Set a TTS channel",
+)
+async def settts(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+        return
+    
+    guild = interaction.guild
+    channels = guild.text_channels
+    
+    select = discord.ui.Select(placeholder="Select a channel...", options=[
+        discord.SelectOption(label=channel.name, value=str(channel.id)) for channel in channels
+    ])
+
+    async def wait_for_selection(interaction):
+        selected_channel_id = int(select.values[0])
+        channel = guild.get_channel(selected_channel_id)
+        
+        if channel:
+            try:
+                with open(config_file_path, 'r') as file:
+                    config_data = json.load(file)
+                
+                if str(guild.id) not in config_data:
+                    config_data[str(guild.id)] = [{"tts-channel-id": selected_channel_id}]
+                else:
+                    config_data[str(guild.id)][0]["tts-channel-id"] = selected_channel_id
+                
+                with open(config_file_path, 'w') as file:
+                    json.dump(config_data, file, indent=4)
+
+                selected_channel_id = int(select.values[0])
+                selected_channel = guild.get_channel(selected_channel_id)
+                
+                await selected_channel.send("This channel has been set for TTS!")
+            except ValueError:
+                await interaction.response.send_message("Invalid channel ID.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Invalid channel selected.", ephemeral=True)
+
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+
+    await interaction.response.send_message("Select a channel to set for TTS:", view=view, ephemeral=True)
+
 
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
     client.loop.create_task(reset_usage())
     client.loop.create_task(check_disconnect())
-    await tree.sync()
+    # await tree.sync()
 
 @client.event
 async def on_message(message):
@@ -134,7 +216,7 @@ async def on_message(message):
             await message.channel.send("Invalid channel ID.")
 
     if message.content == "#stop":
-        voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
+        voice_client = discord.utils.get(bot.voice_clients, guild=message.guild)
         if voice_client and voice_client.is_playing():
             voice_client.stop()
             await message.channel.send("Stopped playing audio.")
