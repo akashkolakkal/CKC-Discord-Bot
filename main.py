@@ -21,11 +21,31 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
+config_file_path = 'config.json'
+if os.path.exists(config_file_path):
+    with open(config_file_path, 'r') as file:
+        config_data = json.load(file)
+else:
+    config_data = {}
 
 @client.event
 async def on_guild_join(guild):
     await guild.system_channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n\nUse the $setttschannel command to set the TTS channel for your server.\nexample: $setttschannel=<textchannelid> \n\nUse the $limit command to check the remaining character limit for the day. \n\nUse the $stop command to stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+    
+    guild_id = str(guild.id)
+    
+    new_guild_data = {
+        "tts-channel-id": 000,  # Replace with actual channel ID
+        "language-code": "mr-IN",
+        "name": "mr-IN-Standard-C",
+        "speech-rate": 1.0,
+        "pitch": 0.0
+    }
 
+    config_data[guild_id] = [new_guild_data]
+
+    with open(config_file_path, 'w') as file:
+        json.dump(config_data, file, indent=4)
     
 def read_usage():
     if os.path.exists(usage_file):
@@ -96,22 +116,16 @@ async def on_message(message):
         channel_id = message.content.split('=')[1]
         try:
             channel = client.get_channel(int(channel_id))
-            if channel:
-                # Load or initialize the JSON file
-                tts_channels_file = 'tts_channels.json'
-                if not os.path.exists(tts_channels_file):
-                    with open(tts_channels_file, 'w') as file:
-                        json.dump({}, file)
-                
-                with open(tts_channels_file, 'r') as file:
-                    tts_channels = json.load(file)
+            if channel:  
+                with open(config_file_path, 'r') as file:
+                    config_data = json.load(file)
                 
                 # Update the channel ID for the server
-                tts_channels[str(message.guild.id)] = int(channel_id)
+                config_data[str(message.guild.id)][0]["tts-channel-id"] = int(channel_id)
                 
                 # Save the updated JSON
-                with open(tts_channels_file, 'w') as file:
-                    json.dump(tts_channels, file)
+                with open(config_file_path, 'w') as file:
+                    json.dump(config_data, file)
                 
                 await message.channel.send(f"TTS channel set to {channel.mention}")
             else:
@@ -128,15 +142,15 @@ async def on_message(message):
             await message.channel.send("Not currently playing audio.")
         return  
 
-    if message.content == "#limit":
+    if message.content == "limit":
         remaining_limit = daily_limit - usage
         await message.channel.send(f"Remaining character limit for today: {remaining_limit}")
         return
 
-    with open('tts_channels.json', 'r') as file:
-                tts_channels = json.load(file)         
+    with open('config.json', 'r') as file:
+                config_data = json.load(file)         
     # Check if the server's ID is in the JSON and get the channel ID
-    tts_channel_id = tts_channels.get(str(message.guild.id))
+    tts_channel_id = config_data[(str(message.guild.id))][0]["tts-channel-id"]
 
     # Check if the message is in a TTS channel before processing further
     if message.channel.id != tts_channel_id:
