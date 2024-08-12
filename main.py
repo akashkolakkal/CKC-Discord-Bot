@@ -85,11 +85,11 @@ async def on_message(message):
     if message.author == client.user or not message.guild:
         return
     
-    if message.content == '$help':
+    if message.content == '#help':
         await message.channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n$setttschannel=<textchannelid> - Set the TTS channel for your server. \n$limit - Check the remaining character limit for the day. \n$stop - Stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
         return
 
-    if message.content.startswith('$setttschannel='):
+    if message.content.startswith('#setttschannel='):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("You must be an administrator to use this command.")
             return
@@ -119,7 +119,7 @@ async def on_message(message):
         except ValueError:
             await message.channel.send("Invalid channel ID.")
 
-    if message.content == "$stop":
+    if message.content == "#stop":
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
         if voice_client and voice_client.is_playing():
             voice_client.stop()
@@ -128,7 +128,7 @@ async def on_message(message):
             await message.channel.send("Not currently playing audio.")
         return  
 
-    if message.content == "$limit":
+    if message.content == "#limit":
         remaining_limit = daily_limit - usage
         await message.channel.send(f"Remaining character limit for today: {remaining_limit}")
         return
