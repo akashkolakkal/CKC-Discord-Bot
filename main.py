@@ -216,7 +216,7 @@ async def on_message(message):
             await message.channel.send("Invalid channel ID.")
 
     if message.content == "#stop":
-        voice_client = discord.utils.get(bot.voice_clients, guild=message.guild)
+        voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
         if voice_client and voice_client.is_playing():
             voice_client.stop()
             await message.channel.send("Stopped playing audio.")
