@@ -1,7 +1,9 @@
 /ckc_venv
 output.mp3
 .env
+.env.dev
 usage.json
 tts_channels.json
+config.json
 /output
 .github
