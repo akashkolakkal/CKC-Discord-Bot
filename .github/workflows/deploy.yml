@@ -28,7 +28,7 @@ jobs:
 
     - name: Temporarily commit changes
       run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.GCP_USERNAME }}@${{ secrets.GCP_VM_IP }} "cd /home/ayusht1d_gmail_com/CKC-Discord-Bot/ && git add . && git commit -m 'fix commit' "
+        ssh -o StrictHostKeyChecking=no ${{ secrets.GCP_USERNAME }}@${{ secrets.GCP_VM_IP }} "cd /home/ayusht1d_gmail_com/CKC-Discord-Bot/ && sudo git add . && sudo git commit -m 'fix commit' "
 
     - name: Pull latest code
       run: |
