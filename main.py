@@ -178,7 +178,7 @@ async def on_ready():
     print(f'{client.user} has connected to Discord!')
     client.loop.create_task(reset_usage())
     client.loop.create_task(check_disconnect())
-    # await tree.sync()
+    await tree.sync()
 
 @client.event
 async def on_message(message):
