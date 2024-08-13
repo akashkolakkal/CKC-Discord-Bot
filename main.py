@@ -248,6 +248,21 @@ async def set_voice(interaction: discord.Interaction):
 
     await interaction.response.send_message("Select a voice to set for TTS:", view=view, ephemeral=True)
 
+# @tree.command(
+#     name="set-speech-rate",
+#     description="Set the speech rate for the TTS",
+# )
+# async def set_speech_rate(interaction: discord.Interaction):
+#     guild=interaction.guild
+#     with open('config.json', 'r') as file:
+#                 configData = json.load(file)
+#     currentSpeechRate = configData[str(guild.id)][0]["speech-rate"]
+#     await interaction.response.send_message("Enter the speech rate...(0.25-4.00 ) \nThe current speech rate is "+str(currentSpeechRate), ephemeral=True)
+#     input = discord.ui.TextInput(label="Set Speech Rate" ,placeholder="Enter the speech rate...(0.25-4.00 )", min_length=1, max_length=4)
+#     configData[str(guild.id)][0]["speech-rate"] = input
+#     with open('config.json', 'w') as file:
+#                 json.dump(currentSpeechRate, file, indent=4)
+
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
