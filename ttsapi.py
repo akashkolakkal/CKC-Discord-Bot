@@ -1,9 +1,18 @@
 import os
 from google.oauth2 import service_account
 from google.cloud import texttospeech
+import json
 
 
-def tts(text_block):
+
+def tts(text_block, guildId):
+
+    with open('config.json') as f:
+        guildData = json.load(f)[str(guildId)]
+    
+    lang_code = guildData[0]["language-code"]
+    voice_name = guildData[0]["name"]
+
     # Retrieve the environment variables
     project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
     client_email = os.getenv('GOOGLE_CLOUD_CLIENT_EMAIL')
@@ -41,13 +50,13 @@ def tts(text_block):
 
     synthesis_input = texttospeech.SynthesisInput(text=text_block)
 
-    voice = texttospeech.VoiceSelectionParams(language_code="mr-IN",
-                                              name="mr-IN-Standard-C")
+    voice = texttospeech.VoiceSelectionParams(language_code=lang_code,
+                                              name=voice_name)
 
     audio_config = texttospeech.AudioConfig(
         audio_encoding=texttospeech.AudioEncoding.MP3,
         effects_profile_id=["small-bluetooth-speaker-class-device"],
-        speaking_rate=1,
+        speaking_rate=0.75,
         pitch=0.75)
 
     response = client.synthesize_speech(input=synthesis_input,

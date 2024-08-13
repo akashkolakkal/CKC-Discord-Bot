@@ -93,7 +93,8 @@ async def check_disconnect():
     description='Owner only'
 )
 async def sync(interaction: discord.Interaction):
-    if interaction.user.id == 909786287614099486 or 691224924915761182:
+    owner_ids = {909786287614099486, 691224924915761182}
+    if interaction.user.id in owner_ids:
         await tree.sync()
         await interaction.response.send_message('Command tree synced.')
     else:
@@ -176,6 +177,76 @@ async def settts(interaction: discord.Interaction):
 
     await interaction.response.send_message("Select a channel to set for TTS:", view=view, ephemeral=True)
 
+voice_dict = {
+    "en-IN-Standard-A": "English-India A",
+    "en-IN-Standard-B": "English-India B",
+    "en-IN-Standard-C": "English-India C",
+    "en-IN-Standard-D": "English-India D",
+    "en-IN-Standard-E": "English-India E",
+    "en-IN-Standard-F": "English-India F",
+    "hi-IN-Standard-A": "Hindi A",
+    "hi-IN-Standard-B": "Hindi B",
+    "hi-IN-Standard-C": "Hindi C",
+    "hi-IN-Standard-D": "Hindi D",
+    "hi-IN-Standard-E": "Hindi E",
+    "hi-IN-Standard-F": "Hindi F",
+    "mr-IN-Standard-A": "Marathi A",
+    "mr-IN-Standard-B": "Marathi B",
+    "mr-IN-Standard-C": "Marathi C"
+}
+
+@tree.command(
+    name="set-voice",
+    description="Set the voice for the TTS",)
+async def set_voice(interaction: discord.Interaction):
+    guild = interaction.guild
+    channels = guild.text_channels
+    
+    select = discord.ui.Select(placeholder="Select a voice...", options=[        
+        discord.SelectOption(label="English-India A", value="en-IN-Standard-A"),
+        discord.SelectOption(label="English-India B", value="en-IN-Standard-B"),
+        discord.SelectOption(label="English-India C", value="en-IN-Standard-C"),
+        discord.SelectOption(label="English-India D", value="en-IN-Standard-D"),
+        discord.SelectOption(label="English-India E", value="en-IN-Standard-E"),
+        discord.SelectOption(label="English-India F", value="en-IN-Standard-F"),
+        discord.SelectOption(label="Hindi A", value="hi-IN-Standard-A"),
+        discord.SelectOption(label="Hindi B", value="hi-IN-Standard-B"),
+        discord.SelectOption(label="Hindi C", value="hi-IN-Standard-C"),
+        discord.SelectOption(label="Hindi D", value="hi-IN-Standard-D"),
+        discord.SelectOption(label="Hindi E", value="hi-IN-Standard-E"),
+        discord.SelectOption(label="Hindi F", value="hi-IN-Standard-F"),
+        discord.SelectOption(label="Marathi A", value="mr-IN-Standard-A"),
+        discord.SelectOption(label="Marathi B", value="mr-IN-Standard-B"),
+        discord.SelectOption(label="Marathi C", value="mr-IN-Standard-C")
+        ])
+
+    async def wait_for_selection(interaction):
+        selected_voice = select.values[0]
+        print(selected_voice)
+        try:
+            with open(config_file_path, 'r') as file:
+                config_data = json.load(file)
+            
+            if str(guild.id) not in config_data:
+                config_data[str(guild.id)] = [{"language-code": selected_voice[0:5]}]
+                config_data[str(guild.id)][0]["name"] = selected_voice
+            else:
+                config_data[str(guild.id)][0]["language-code"] = selected_voice[0:5]
+                config_data[str(guild.id)][0]["name"] = selected_voice
+            
+            with open(config_file_path, 'w') as file:
+                json.dump(config_data, file, indent=4)
+
+            await interaction.response.send_message(f"Voice set to "+voice_dict[selected_voice], ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message("Invalid voice selected.", ephemeral=True)
+
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+
+    await interaction.response.send_message("Select a voice to set for TTS:", view=view, ephemeral=True)
 
 @client.event
 async def on_ready():
@@ -191,11 +262,11 @@ async def on_message(message):
     if message.author == client.user or not message.guild:
         return
     
-    if message.content == '#help':
+    if message.content == '$help':
         await message.channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n$setttschannel=<textchannelid> - Set the TTS channel for your server. \n$limit - Check the remaining character limit for the day. \n$stop - Stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
         return
 
-    if message.content.startswith('#setttschannel='):
+    if message.content.startswith('$setttschannel='):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("You must be an administrator to use this command.")
             return
@@ -219,7 +290,7 @@ async def on_message(message):
         except ValueError:
             await message.channel.send("Invalid channel ID.")
 
-    if message.content == "#stop":
+    if message.content == "$stop":
         voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
         if voice_client and voice_client.is_playing():
             voice_client.stop()
@@ -228,7 +299,7 @@ async def on_message(message):
             await message.channel.send("Not currently playing audio.")
         return  
 
-    if message.content == "limit":
+    if message.content == "$limit":
         remaining_limit = daily_limit - usage
         await message.channel.send(f"Remaining character limit for today: {remaining_limit}")
         return
@@ -254,7 +325,7 @@ async def on_message(message):
     
     usage += message_length
     write_usage(usage)
-    api.tts(message.content)
+    api.tts(message.content, message.guild.id)
 
     voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
     
