@@ -22,11 +22,11 @@ client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 config_file_path = 'config.json'
-if os.path.exists(config_file_path):
-    with open(config_file_path, 'r') as file:
-        config_data = json.load(file)
-else:
-    config_data = {}
+# if os.path.exists(config_file_path):
+#     with open(config_file_path, 'r') as file:
+#         config_data = json.load(file)
+# else:
+#     config_data = {}
 
 @client.event
 async def on_guild_join(guild):
@@ -41,7 +41,11 @@ async def on_guild_join(guild):
         "speech-rate": 1.0,
         "pitch": 0.0
     }
-
+    if os.path.exists(config_file_path):
+        with open(config_file_path, 'r') as file:
+            config_data = json.load(file)
+    else:
+        config_data = {}
     config_data[guild_id] = [new_guild_data]
 
     with open(config_file_path, 'w') as file:
@@ -158,7 +162,7 @@ async def settts(interaction: discord.Interaction):
 
                 selected_channel_id = int(select.values[0])
                 selected_channel = guild.get_channel(selected_channel_id)
-                
+                await interaction.response.send_message(f"TTS channel set to {selected_channel.mention}", ephemeral=True)
                 await selected_channel.send("This channel has been set for TTS!")
             except ValueError:
                 await interaction.response.send_message("Invalid channel ID.", ephemeral=True)
