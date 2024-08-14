@@ -67,3 +67,13 @@ def tts(text_block, guildId):
     with open("output.mp3", "wb") as out:
         out.write(response.audio_content)
         print("Audio content written to file 'output.mp3'")
+        output_folder = "messageOutput"
+        output_file = os.path.join(output_folder, "output.mp3")
+
+        # Create the output folder if it doesn't exist
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+
+        with open(output_file, "wb") as out:
+            out.write(response.audio_content)
+            print(f"Audio content written to file '{output_file}'")
