@@ -12,6 +12,7 @@ def tts(text_block, guildId):
     
     lang_code = guildData[0]["language-code"]
     voice_name = guildData[0]["name"]
+    voice_speed = guildData[0]["speech-rate"]
 
     # Retrieve the environment variables
     project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
@@ -56,7 +57,7 @@ def tts(text_block, guildId):
     audio_config = texttospeech.AudioConfig(
         audio_encoding=texttospeech.AudioEncoding.MP3,
         effects_profile_id=["small-bluetooth-speaker-class-device"],
-        speaking_rate=0.75,
+        speaking_rate=voice_speed,
         pitch=0.75)
 
     response = client.synthesize_speech(input=synthesis_input,

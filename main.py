@@ -200,7 +200,6 @@ voice_dict = {
     description="Set the voice for the TTS",)
 async def set_voice(interaction: discord.Interaction):
     guild = interaction.guild
-    channels = guild.text_channels
     
     select = discord.ui.Select(placeholder="Select a voice...", options=[        
         discord.SelectOption(label="English-India A", value="en-IN-Standard-A"),
@@ -248,20 +247,57 @@ async def set_voice(interaction: discord.Interaction):
 
     await interaction.response.send_message("Select a voice to set for TTS:", view=view, ephemeral=True)
 
-# @tree.command(
-#     name="set-speech-rate",
-#     description="Set the speech rate for the TTS",
-# )
-# async def set_speech_rate(interaction: discord.Interaction):
-#     guild=interaction.guild
-#     with open('config.json', 'r') as file:
-#                 configData = json.load(file)
-#     currentSpeechRate = configData[str(guild.id)][0]["speech-rate"]
-#     await interaction.response.send_message("Enter the speech rate...(0.25-4.00 ) \nThe current speech rate is "+str(currentSpeechRate), ephemeral=True)
-#     input = discord.ui.TextInput(label="Set Speech Rate" ,placeholder="Enter the speech rate...(0.25-4.00 )", min_length=1, max_length=4)
-#     configData[str(guild.id)][0]["speech-rate"] = input
-#     with open('config.json', 'w') as file:
-#                 json.dump(currentSpeechRate, file, indent=4)
+@tree.command(
+    name="set-speech-rate",
+    description="Set the speech rate for the TTS",
+)
+async def set_speech_rate(interaction: discord.Interaction):
+    guild=interaction.guild
+    with open('config.json', 'r') as file:
+                configData = json.load(file)
+    currentSpeechRate = configData[str(guild.id)][0]["speech-rate"]
+    select = discord.ui.Select(placeholder="Select a speech rate...", options=[
+        discord.SelectOption(label="0.25", value="0.25"),
+        discord.SelectOption(label="0.5", value="0.5"),
+        discord.SelectOption(label="0.75", value="0.75"),
+        discord.SelectOption(label="1.0", value="1.0"),
+        discord.SelectOption(label="1.25", value="1.25"),
+        discord.SelectOption(label="1.5", value="1.5"),
+        discord.SelectOption(label="1.75", value="1.75"),
+        discord.SelectOption(label="2.0", value="2.0"),
+        discord.SelectOption(label="2.25", value="2.25"),
+        discord.SelectOption(label="2.5", value="2.5"),
+        discord.SelectOption(label="2.75", value="2.75"),
+        discord.SelectOption(label="3.0", value="3.0"),
+        discord.SelectOption(label="3.25", value="3.25"),
+        discord.SelectOption(label="3.5", value="3.5"),
+        discord.SelectOption(label="3.75", value="3.75"),
+        discord.SelectOption(label="4.0", value="4.0")
+    ])
+    async def wait_for_selection(interaction):
+        selected_speech_rate = float(select.values[0])
+        try:
+            with open(config_file_path, 'r') as file:
+                config_data = json.load(file)
+            
+            if str(guild.id) not in config_data:
+                config_data[str(guild.id)] = [{"speech-rate": selected_speech_rate}]
+            else:
+                config_data[str(guild.id)][0]["speech-rate"] = selected_speech_rate
+            
+            with open(config_file_path, 'w') as file:
+                json.dump(config_data, file, indent=4)
+
+            await interaction.response.send_message(f"Speech rate set to {selected_speech_rate}", ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message("Invalid speech rate selected.", ephemeral=True)
+    
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+
+    await interaction.response.send_message("Select a speech rate to set for TTS:", view=view, ephemeral=True)
 
 @client.event
 async def on_ready():
@@ -356,7 +392,7 @@ async def on_message(message):
             if not voice_client.is_playing():
                 voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
             else:
-                await message.channel.send("Already playing audio.")
+                await message.channel.send("Already playing audio. Please wait for the current audio to finish.")
         else:
             await message.channel.send("Audio file not found.")
     else:
