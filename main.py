@@ -28,18 +28,37 @@ config_file_path = 'config.json'
 # else:
 #     config_data = {}
 
+voice_dict = {
+    "en-IN-Standard-A": "English-India A",
+    "en-IN-Standard-B": "English-India B",
+    "en-IN-Standard-C": "English-India C",
+    "en-IN-Standard-D": "English-India D",
+    "en-IN-Standard-E": "English-India E",
+    "en-IN-Standard-F": "English-India F",
+    "hi-IN-Standard-A": "Hindi A",
+    "hi-IN-Standard-B": "Hindi B",
+    "hi-IN-Standard-C": "Hindi C",
+    "hi-IN-Standard-D": "Hindi D",
+    "hi-IN-Standard-E": "Hindi E",
+    "hi-IN-Standard-F": "Hindi F",
+    "mr-IN-Standard-A": "Marathi A",
+    "mr-IN-Standard-B": "Marathi B",
+    "mr-IN-Standard-C": "Marathi C"
+}
+
 @client.event
 async def on_guild_join(guild):
-    await guild.system_channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n\nUse the $setttschannel command to set the TTS channel for your server.\nexample: $setttschannel=<textchannelid> \n\nUse the $limit command to check the remaining character limit for the day. \n\nUse the $stop command to stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+    await guild.system_channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n/settts - Set the TTS channel for your server. \n/help - get help regarding all commands \n/stop - stop the audio playback \n/limit - check the remaining character limit for the day \n/stop - stop a playing message midway \n/banfromtts - ban that irritating person from using the bot and spamming messages \n/unbanfromtts - unban banned people and let them use the bot \n/set-voice - change voice style of the bot \n/set-speech-rate - change the speech speed of the bot \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
     
     guild_id = str(guild.id)
     
     new_guild_data = {
-        "tts-channel-id": 000,  # Replace with actual channel ID
-        "language-code": "mr-IN",
-        "name": "mr-IN-Standard-C",
+        "tts-channel-id": 000,
+        "language-code": "en-IN",
+        "name": "en-IN-Standard-C",
         "speech-rate": 1.0,
-        "pitch": 0.0
+        "pitch": 0.0,
+        "banned-user-ids": []
     }
     if os.path.exists(config_file_path):
         with open(config_file_path, 'r') as file:
@@ -89,6 +108,27 @@ async def check_disconnect():
                     print(f"Disconnected from {voice_client.channel} due to inactivity.")
 
 @tree.command(
+    name='get-config',
+    description='get the config information for this server'
+)
+async def get_config(interaction: discord.Interaction):
+    with open(config_file_path, 'r') as file:
+        config_data = json.load(file)
+    guild_id = str(interaction.guild.id)
+    tts_channel_id = config_data[guild_id][0]["tts-channel-id"]
+    tts_channel = interaction.guild.get_channel(tts_channel_id)
+    language = voice_dict[config_data[guild_id][0]["name"]]
+    speech_rate = config_data[guild_id][0]["speech-rate"]
+    banned_user_ids = config_data[guild_id][0]["banned-user-ids"]
+    banned_users = [interaction.guild.get_member(user_id).name for user_id in banned_user_ids]
+    if guild_id in config_data:
+        await interaction.response.send_message("The server data for CKC is:", ephemeral=True)
+        await interaction.channel.send(f"TTS Channel : {tts_channel} \nVoice : {language} \nSpeech Rate : {speech_rate} \nBanned Users : {banned_users}")
+    else:
+        await interaction.response.send_message("No config data found for this server.", ephemeral=True)
+
+
+@tree.command(
     name='sync', 
     description='Owner only'
 )
@@ -105,7 +145,7 @@ async def sync(interaction: discord.Interaction):
     description="Find instructions on how to use the bot here",
 )
 async def first_command(interaction):
-    await interaction.response.send_message("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n$setttschannel=<textchannelid> - Set the TTS channel for your server. \n$limit - Check the remaining character limit for the day. \n$stop - Stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+    await interaction.response.send_message("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n/settts - Set the TTS channel for your server. \n/help - get help regarding all commands \n/stop - stop the audio playback \n/limit - check the remaining character limit for the day \n/stop - stop a playing message midway \n/banfromtts - ban that irritating person from using the bot and spamming messages \n/unbanfromtts - unban banned people and let them use the bot \n/set-voice - change voice style of the bot \n/set-speech-rate - change the speech speed of the bot \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
 
 @tree.command(
     name="stop",
@@ -177,30 +217,13 @@ async def settts(interaction: discord.Interaction):
 
     await interaction.response.send_message("Select a channel to set for TTS:", view=view, ephemeral=True)
 
-voice_dict = {
-    "en-IN-Standard-A": "English-India A",
-    "en-IN-Standard-B": "English-India B",
-    "en-IN-Standard-C": "English-India C",
-    "en-IN-Standard-D": "English-India D",
-    "en-IN-Standard-E": "English-India E",
-    "en-IN-Standard-F": "English-India F",
-    "hi-IN-Standard-A": "Hindi A",
-    "hi-IN-Standard-B": "Hindi B",
-    "hi-IN-Standard-C": "Hindi C",
-    "hi-IN-Standard-D": "Hindi D",
-    "hi-IN-Standard-E": "Hindi E",
-    "hi-IN-Standard-F": "Hindi F",
-    "mr-IN-Standard-A": "Marathi A",
-    "mr-IN-Standard-B": "Marathi B",
-    "mr-IN-Standard-C": "Marathi C"
-}
+
 
 @tree.command(
     name="set-voice",
     description="Set the voice for the TTS",)
 async def set_voice(interaction: discord.Interaction):
     guild = interaction.guild
-    channels = guild.text_channels
     
     select = discord.ui.Select(placeholder="Select a voice...", options=[        
         discord.SelectOption(label="English-India A", value="en-IN-Standard-A"),
@@ -248,27 +271,130 @@ async def set_voice(interaction: discord.Interaction):
 
     await interaction.response.send_message("Select a voice to set for TTS:", view=view, ephemeral=True)
 
-# @tree.command(
-#     name="set-speech-rate",
-#     description="Set the speech rate for the TTS",
-# )
-# async def set_speech_rate(interaction: discord.Interaction):
-#     guild=interaction.guild
-#     with open('config.json', 'r') as file:
-#                 configData = json.load(file)
-#     currentSpeechRate = configData[str(guild.id)][0]["speech-rate"]
-#     await interaction.response.send_message("Enter the speech rate...(0.25-4.00 ) \nThe current speech rate is "+str(currentSpeechRate), ephemeral=True)
-#     input = discord.ui.TextInput(label="Set Speech Rate" ,placeholder="Enter the speech rate...(0.25-4.00 )", min_length=1, max_length=4)
-#     configData[str(guild.id)][0]["speech-rate"] = input
-#     with open('config.json', 'w') as file:
-#                 json.dump(currentSpeechRate, file, indent=4)
+@tree.command(
+    name="set-speech-rate",
+    description="Set the speech rate for the TTS",
+)
+async def set_speech_rate(interaction: discord.Interaction):
+    guild=interaction.guild
+    with open('config.json', 'r') as file:
+                configData = json.load(file)
+    currentSpeechRate = configData[str(guild.id)][0]["speech-rate"]
+    select = discord.ui.Select(placeholder="Select a speech rate...", options=[
+        discord.SelectOption(label="0.25", value="0.25"),
+        discord.SelectOption(label="0.5", value="0.5"),
+        discord.SelectOption(label="0.75", value="0.75"),
+        discord.SelectOption(label="1.0", value="1.0"),
+        discord.SelectOption(label="1.25", value="1.25"),
+        discord.SelectOption(label="1.5", value="1.5"),
+        discord.SelectOption(label="1.75", value="1.75"),
+        discord.SelectOption(label="2.0", value="2.0"),
+        discord.SelectOption(label="2.25", value="2.25"),
+        discord.SelectOption(label="2.5", value="2.5"),
+        discord.SelectOption(label="2.75", value="2.75"),
+        discord.SelectOption(label="3.0", value="3.0"),
+        discord.SelectOption(label="3.25", value="3.25"),
+        discord.SelectOption(label="3.5", value="3.5"),
+        discord.SelectOption(label="3.75", value="3.75"),
+        discord.SelectOption(label="4.0", value="4.0")
+    ])
+    async def wait_for_selection(interaction):
+        selected_speech_rate = float(select.values[0])
+        try:
+            with open(config_file_path, 'r') as file:
+                config_data = json.load(file)
+            
+            if str(guild.id) not in config_data:
+                config_data[str(guild.id)] = [{"speech-rate": selected_speech_rate}]
+            else:
+                config_data[str(guild.id)][0]["speech-rate"] = selected_speech_rate
+            
+            with open(config_file_path, 'w') as file:
+                json.dump(config_data, file, indent=4)
 
+            await interaction.response.send_message(f"Speech rate set to {selected_speech_rate}", ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message("Invalid speech rate selected.", ephemeral=True)
+    
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+
+    await interaction.response.send_message("Select a speech rate to set for TTS:", view=view, ephemeral=True)
+
+@tree.command(
+    name="banfromtts",
+    description="Ban a user from using the TTS bot",)
+async def banfromtts(interaction: discord.Interaction):
+    guild=interaction.guild
+    with open('config.json', 'r') as file:
+                configData = json.load(file)
+    select = discord.ui.Select(placeholder="Select a user to ban...", options=[
+        discord.SelectOption(label=member.name, value=str(member.id)) for member in guild.members
+    ])
+    async def wait_for_selection(interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+        selected_user_id = int(select.values[0])
+        if "banned-user-ids" not in configData[str(guild.id)][0]:
+            configData[str(guild.id)][0]["banned-user-ids"] = [selected_user_id]
+        else:
+            configData[str(guild.id)][0]["banned-user-ids"].append(selected_user_id)
+        with open(config_file_path, 'w') as file:
+            json.dump(configData, file, indent=4)
+        await interaction.response.send_message(f"User banned from using TTS.", ephemeral=True)    
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+    await interaction.response.send_message("Select a user to ban from using TTS:", view=view, ephemeral=True)
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
     client.loop.create_task(reset_usage())
     client.loop.create_task(check_disconnect())
     await tree.sync()
+
+@tree.command(
+    name="unbanfromtts",
+    description="Unban a user from using the TTS bot",)
+async def unbanfromtts(interaction: discord.Interaction):
+    guild=interaction.guild
+    with open('config.json', 'r') as file:
+                configData = json.load(file)
+    banned_user_ids = configData[str(guild.id)][0]["banned-user-ids"]
+    if banned_user_ids == []:
+        await interaction.response.send_message("No users are currently banned from using TTS.", ephemeral=True)
+        return
+    select = discord.ui.Select(placeholder="Select a user to unban...", options=[
+        discord.SelectOption(label=member.name, value=str(member.id)) for member in guild.members if member.id in banned_user_ids
+    ])
+    async def wait_for_selection(interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+        selected_user_id = int(select.values[0])
+        configData[str(guild.id)][0]["banned-user-ids"].remove(selected_user_id)
+        with open(config_file_path, 'w') as file:
+            json.dump(configData, file, indent=4)
+        await interaction.response.send_message(f"User unbanned from using TTS.", ephemeral=True)    
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+    await interaction.response.send_message("Select a user to unban from using TTS:", view=view, ephemeral=True)
+
+@client.event
+async def on_guild_remove(guild):
+    with open(config_file_path, 'r') as file:
+        config_data = json.load(file)
+    guild_id = str(guild.id)
+    config_data.pop(guild_id)
+    with open(config_file_path, 'w') as file:
+        json.dump(config_data, file, indent=4)
+
 
 @client.event
 async def on_message(message):
@@ -278,7 +404,7 @@ async def on_message(message):
         return
     
     if message.content == '$help':
-        await message.channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n$setttschannel=<textchannelid> - Set the TTS channel for your server. \n$limit - Check the remaining character limit for the day. \n$stop - Stop the audio playback. \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+        await message.channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n/settts - Set the TTS channel for your server. \n/help - get help regarding all commands \n/stop - stop the audio playback \n/limit - check the remaining character limit for the day \n/stop - stop a playing message midway \n/banfromtts - ban that irritating person from using the bot and spamming messages \n/unbanfromtts - unban banned people and let them use the bot \n/set-voice - change voice style of the bot \n/set-speech-rate - change the speech speed of the bot \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
         return
 
     if message.content.startswith('$setttschannel='):
@@ -351,12 +477,12 @@ async def on_message(message):
         elif voice_client.channel != vc:
             await voice_client.move_to(vc)
         
-        if os.path.exists("output.mp3"): 
-            audio_source = FFmpegPCMAudio("output.mp3")
+        if os.path.exists("messageOutput/output.mp3"): 
+            audio_source = FFmpegPCMAudio("messageOutput/output.mp3")
             if not voice_client.is_playing():
                 voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
             else:
-                await message.channel.send("Already playing audio.")
+                await message.channel.send("Already playing audio. Please wait for the current audio to finish.")
         else:
             await message.channel.send("Audio file not found.")
     else:
