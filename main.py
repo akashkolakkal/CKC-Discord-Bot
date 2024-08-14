@@ -477,8 +477,8 @@ async def on_message(message):
         elif voice_client.channel != vc:
             await voice_client.move_to(vc)
         
-        if os.path.exists("output.mp3"): 
-            audio_source = FFmpegPCMAudio("output.mp3")
+        if os.path.exists("messageOutput/output.mp3"): 
+            audio_source = FFmpegPCMAudio("messageOutput/output.mp3")
             if not voice_client.is_playing():
                 voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
             else:
