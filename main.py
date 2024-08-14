@@ -28,6 +28,24 @@ config_file_path = 'config.json'
 # else:
 #     config_data = {}
 
+voice_dict = {
+    "en-IN-Standard-A": "English-India A",
+    "en-IN-Standard-B": "English-India B",
+    "en-IN-Standard-C": "English-India C",
+    "en-IN-Standard-D": "English-India D",
+    "en-IN-Standard-E": "English-India E",
+    "en-IN-Standard-F": "English-India F",
+    "hi-IN-Standard-A": "Hindi A",
+    "hi-IN-Standard-B": "Hindi B",
+    "hi-IN-Standard-C": "Hindi C",
+    "hi-IN-Standard-D": "Hindi D",
+    "hi-IN-Standard-E": "Hindi E",
+    "hi-IN-Standard-F": "Hindi F",
+    "mr-IN-Standard-A": "Marathi A",
+    "mr-IN-Standard-B": "Marathi B",
+    "mr-IN-Standard-C": "Marathi C"
+}
+
 @client.event
 async def on_guild_join(guild):
     await guild.system_channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n/settts - Set the TTS channel for your server. \n/help - get help regarding all commands \n/stop - stop the audio playback \n/limit - check the remaining character limit for the day \n/stop - stop a playing message midway \n/banfromtts - ban that irritating person from using the bot and spamming messages \n/unbanfromtts - unban banned people and let them use the bot \n/set-voice - change voice style of the bot \n/set-speech-rate - change the speech speed of the bot \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
@@ -88,6 +106,27 @@ async def check_disconnect():
                 if len(voice_client.channel.members) == 1:
                     await voice_client.disconnect()
                     print(f"Disconnected from {voice_client.channel} due to inactivity.")
+
+@tree.command(
+    name='get-config',
+    description='get the config information for this server'
+)
+async def get_config(interaction: discord.Interaction):
+    with open(config_file_path, 'r') as file:
+        config_data = json.load(file)
+    guild_id = str(interaction.guild.id)
+    tts_channel_id = config_data[guild_id][0]["tts-channel-id"]
+    tts_channel = interaction.guild.get_channel(tts_channel_id)
+    language = voice_dict[config_data[guild_id][0]["name"]]
+    speech_rate = config_data[guild_id][0]["speech-rate"]
+    banned_user_ids = config_data[guild_id][0]["banned-user-ids"]
+    banned_users = [interaction.guild.get_member(user_id).name for user_id in banned_user_ids]
+    if guild_id in config_data:
+        await interaction.response.send_message("The server data for CKC is:", ephemeral=True)
+        await interaction.channel.send(f"TTS Channel : {tts_channel} \nVoice : {language} \nSpeech Rate : {speech_rate} \nBanned Users : {banned_users}")
+    else:
+        await interaction.response.send_message("No config data found for this server.", ephemeral=True)
+
 
 @tree.command(
     name='sync', 
@@ -178,23 +217,7 @@ async def settts(interaction: discord.Interaction):
 
     await interaction.response.send_message("Select a channel to set for TTS:", view=view, ephemeral=True)
 
-voice_dict = {
-    "en-IN-Standard-A": "English-India A",
-    "en-IN-Standard-B": "English-India B",
-    "en-IN-Standard-C": "English-India C",
-    "en-IN-Standard-D": "English-India D",
-    "en-IN-Standard-E": "English-India E",
-    "en-IN-Standard-F": "English-India F",
-    "hi-IN-Standard-A": "Hindi A",
-    "hi-IN-Standard-B": "Hindi B",
-    "hi-IN-Standard-C": "Hindi C",
-    "hi-IN-Standard-D": "Hindi D",
-    "hi-IN-Standard-E": "Hindi E",
-    "hi-IN-Standard-F": "Hindi F",
-    "mr-IN-Standard-A": "Marathi A",
-    "mr-IN-Standard-B": "Marathi B",
-    "mr-IN-Standard-C": "Marathi C"
-}
+
 
 @tree.command(
     name="set-voice",
