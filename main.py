@@ -35,11 +35,12 @@ async def on_guild_join(guild):
     guild_id = str(guild.id)
     
     new_guild_data = {
-        "tts-channel-id": 000,  # Replace with actual channel ID
-        "language-code": "mr-IN",
-        "name": "mr-IN-Standard-C",
+        "tts-channel-id": 000,
+        "language-code": "en-IN",
+        "name": "en-IN-Standard-C",
         "speech-rate": 1.0,
-        "pitch": 0.0
+        "pitch": 0.0,
+        "banned-user-ids": []
     }
     if os.path.exists(config_file_path):
         with open(config_file_path, 'r') as file:
@@ -299,12 +300,78 @@ async def set_speech_rate(interaction: discord.Interaction):
 
     await interaction.response.send_message("Select a speech rate to set for TTS:", view=view, ephemeral=True)
 
+@tree.command(
+    name="banfromtts",
+    description="Ban a user from using the TTS bot",)
+async def banfromtts(interaction: discord.Interaction):
+    guild=interaction.guild
+    with open('config.json', 'r') as file:
+                configData = json.load(file)
+    select = discord.ui.Select(placeholder="Select a user to ban...", options=[
+        discord.SelectOption(label=member.name, value=str(member.id)) for member in guild.members
+    ])
+    async def wait_for_selection(interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+        selected_user_id = int(select.values[0])
+        if "banned-user-ids" not in configData[str(guild.id)][0]:
+            configData[str(guild.id)][0]["banned-user-ids"] = [selected_user_id]
+        else:
+            configData[str(guild.id)][0]["banned-user-ids"].append(selected_user_id)
+        with open(config_file_path, 'w') as file:
+            json.dump(configData, file, indent=4)
+        await interaction.response.send_message(f"User banned from using TTS.", ephemeral=True)    
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+    await interaction.response.send_message("Select a user to ban from using TTS:", view=view, ephemeral=True)
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
     client.loop.create_task(reset_usage())
     client.loop.create_task(check_disconnect())
     await tree.sync()
+
+@tree.command(
+    name="unbanfromtts",
+    description="Unban a user from using the TTS bot",)
+async def unbanfromtts(interaction: discord.Interaction):
+    guild=interaction.guild
+    with open('config.json', 'r') as file:
+                configData = json.load(file)
+    banned_user_ids = configData[str(guild.id)][0]["banned-user-ids"]
+    if banned_user_ids == []:
+        await interaction.response.send_message("No users are currently banned from using TTS.", ephemeral=True)
+        return
+    select = discord.ui.Select(placeholder="Select a user to unban...", options=[
+        discord.SelectOption(label=member.name, value=str(member.id)) for member in guild.members if member.id in banned_user_ids
+    ])
+    async def wait_for_selection(interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+        selected_user_id = int(select.values[0])
+        configData[str(guild.id)][0]["banned-user-ids"].remove(selected_user_id)
+        with open(config_file_path, 'w') as file:
+            json.dump(configData, file, indent=4)
+        await interaction.response.send_message(f"User unbanned from using TTS.", ephemeral=True)    
+    select.callback = wait_for_selection
+
+    view = discord.ui.View()
+    view.add_item(select)
+    await interaction.response.send_message("Select a user to unban from using TTS:", view=view, ephemeral=True)
+
+@client.event
+async def on_guild_remove(guild):
+    with open(config_file_path, 'r') as file:
+        config_data = json.load(file)
+    guild_id = str(guild.id)
+    config_data.pop(guild_id)
+    with open(config_file_path, 'w') as file:
+        json.dump(config_data, file, indent=4)
+
 
 @client.event
 async def on_message(message):
