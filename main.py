@@ -470,7 +470,10 @@ async def on_message(message):
     
     usage += message_length
     write_usage(usage)
-    api.tts(message.content, message.guild.id)
+    content = message.content
+    for user in message.mentions:
+        content = content.replace(f'<@{user.id}>', user.name)
+    api.tts(content, message.guild.id)
 
     voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
     
