@@ -449,9 +449,13 @@ async def on_message(message):
                 config_data = json.load(file)         
     # Check if the server's ID is in the JSON and get the channel ID
     tts_channel_id = config_data[(str(message.guild.id))][0]["tts-channel-id"]
-
     # Check if the message is in a TTS channel before processing further
     if message.channel.id != tts_channel_id:
+        return
+
+    banned_user_ids = config_data[(str(message.guild.id))][0]["banned-user-ids"]
+    if message.author.id in banned_user_ids:
+        await message.channel.send("You have been banned from using the TTS bot.")
         return
 
     message_length = len(message.content)
