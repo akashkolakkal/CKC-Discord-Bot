@@ -39,6 +39,47 @@ console_handler.setFormatter(formatter)
 
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
+import sys, threading
+
+# Capture warnings emitted via the `warnings` module
+logging.captureWarnings(True)
+
+# Global uncaught exception handler for the main thread
+def _handle_uncaught(exc_type, exc_value, exc_tb):
+    logger.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_tb))
+
+sys.excepthook = _handle_uncaught
+
+# Thread exception handler (Python 3.8+)
+def _thread_excepthook(args):
+    logger.error("Uncaught thread exception", exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+try:
+    threading.excepthook = _thread_excepthook
+except AttributeError:
+    # Older Python versions may not expose threading.excepthook
+    pass
+
+# Asyncio loop-level exception handler
+def _asyncio_exception_handler(loop, context):
+    exc = context.get('exception')
+    if exc:
+        logger.error("Asyncio exception caught", exc_info=(type(exc), exc, exc.__traceback__))
+    else:
+        logger.error("Asyncio context error: %s", context.get('message'))
+
+asyncio.get_event_loop().set_exception_handler(_asyncio_exception_handler)
+
+def _log_task_exceptions(task: asyncio.Task):
+    if task.cancelled():
+        return
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        return
+    if exc:
+        logger.error("Unhandled task exception", exc_info=(type(exc), exc, exc.__traceback__))
+
 daily_limit = 1250000  
 max_message_length = 200 
 disconnect_time = 2  # 2 seconds
@@ -487,9 +528,12 @@ async def banfromtts(interaction: discord.Interaction):
 @client.event
 async def on_ready():
     logger.info(f'{client.user} has connected to Discord!')
-    client.loop.create_task(reset_usage())
-    client.loop.create_task(check_disconnect())
-    client.loop.create_task(send_critical_logs_to_discord())
+    t1 = client.loop.create_task(reset_usage())
+    t1.add_done_callback(_log_task_exceptions)
+    t2 = client.loop.create_task(check_disconnect())
+    t2.add_done_callback(_log_task_exceptions)
+    t3 = client.loop.create_task(send_critical_logs_to_discord())
+    t3.add_done_callback(_log_task_exceptions)
     await tree.sync()
     logger.info("All background tasks started and command tree synced.")
 
