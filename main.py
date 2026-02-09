@@ -6,10 +6,80 @@ from discord import FFmpegPCMAudio, app_commands
 import asyncio
 from datetime import datetime, timedelta
 import json
+import logging
+from logging.handlers import RotatingFileHandler
+import aiohttp
 
 load_dotenv()
 
 TOKEN = os.getenv('TOKEN')
+DISCORD_LOG_WEBHOOK = os.getenv('DISCORD_LOG_WEBHOOK')
+
+# Configure logging
+log_file = 'bot.log'
+max_log_size = 5 * 1024 * 1024  # 5MB
+backup_count = 3
+
+logger = logging.getLogger('CKCBot')
+logger.setLevel(logging.DEBUG)
+
+# File handler with rotation
+file_handler = RotatingFileHandler(log_file, maxBytes=max_log_size, backupCount=backup_count)
+file_handler.setLevel(logging.DEBUG)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                             datefmt='%Y-%m-%d %H:%M:%S')
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+import sys, threading
+
+# Capture warnings emitted via the `warnings` module
+logging.captureWarnings(True)
+
+# Global uncaught exception handler for the main thread
+def _handle_uncaught(exc_type, exc_value, exc_tb):
+    logger.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_tb))
+
+sys.excepthook = _handle_uncaught
+
+# Thread exception handler (Python 3.8+)
+def _thread_excepthook(args):
+    logger.error("Uncaught thread exception", exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+try:
+    threading.excepthook = _thread_excepthook
+except AttributeError:
+    # Older Python versions may not expose threading.excepthook
+    pass
+
+# Asyncio loop-level exception handler
+def _asyncio_exception_handler(loop, context):
+    exc = context.get('exception')
+    if exc:
+        logger.error("Asyncio exception caught", exc_info=(type(exc), exc, exc.__traceback__))
+    else:
+        logger.error("Asyncio context error: %s", context.get('message'))
+
+asyncio.get_event_loop().set_exception_handler(_asyncio_exception_handler)
+
+def _log_task_exceptions(task: asyncio.Task):
+    if task.cancelled():
+        return
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        return
+    if exc:
+        logger.error("Unhandled task exception", exc_info=(type(exc), exc, exc.__traceback__))
+
 daily_limit = 1250000  
 max_message_length = 200 
 disconnect_time = 2  # 2 seconds
@@ -48,43 +118,113 @@ voice_dict = {
 
 @client.event
 async def on_guild_join(guild):
-    await guild.system_channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n/settts - Set the TTS channel for your server. \n/help - get help regarding all commands \n/stop - stop the audio playback \n/limit - check the remaining character limit for the day \n/stop - stop a playing message midway \n/banfromtts - ban that irritating person from using the bot and spamming messages \n/unbanfromtts - unban banned people and let them use the bot \n/set-voice - change voice style of the bot \n/set-speech-rate - change the speech speed of the bot \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
-    
-    guild_id = str(guild.id)
-    
-    new_guild_data = {
-        "tts-channel-id": 000,
-        "language-code": "en-IN",
-        "name": "en-IN-Standard-C",
-        "speech-rate": 1.0,
-        "pitch": 0.0,
-        "banned-user-ids": []
-    }
-    if os.path.exists(config_file_path):
-        with open(config_file_path, 'r') as file:
-            config_data = json.load(file)
-    else:
-        config_data = {}
-    config_data[guild_id] = [new_guild_data]
+    try:
+        await guild.system_channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n/settts - Set the TTS channel for your server. \n/help - get help regarding all commands \n/stop - stop the audio playback \n/limit - check the remaining character limit for the day \n/stop - stop a playing message midway \n/banfromtts - ban that irritating person from using the bot and spamming messages \n/unbanfromtts - unban banned people and let them use the bot \n/set-voice - change voice style of the bot \n/set-speech-rate - change the speech speed of the bot \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
+        
+        guild_id = str(guild.id)
+        
+        new_guild_data = {
+            "tts-channel-id": 000,
+            "language-code": "en-IN",
+            "name": "en-IN-Standard-C",
+            "speech-rate": 1.0,
+            "pitch": 0.0,
+            "banned-user-ids": []
+        }
+        if os.path.exists(config_file_path):
+            with open(config_file_path, 'r') as file:
+                config_data = json.load(file)
+        else:
+            config_data = {}
+        config_data[guild_id] = [new_guild_data]
 
-    with open(config_file_path, 'w') as file:
-        json.dump(config_data, file, indent=4)
+        with open(config_file_path, 'w') as file:
+            json.dump(config_data, file, indent=4)
+        
+        logger.info(f"Bot joined guild {guild.name} (ID: {guild_id}). Config initialized.")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse config.json on guild join for {guild.name}: {str(e)}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Error on guild join event for {guild.name}: {str(e)}", exc_info=True)
     
 def read_usage():
-    if os.path.exists(usage_file):
-        with open(usage_file, 'r') as file:
-            data = json.load(file)
-            return data.get('usage', 0)
-    else:
-        # Create the file with initial usage of 0 if it doesn't exist
+    try:
+        if os.path.exists(usage_file):
+            with open(usage_file, 'r') as file:
+                data = json.load(file)
+                return data.get('usage', 0)
+        else:
+            # Create the file with initial usage of 0 if it doesn't exist
+            write_usage(0)
+            return 0
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse usage.json: {str(e)}", exc_info=True)
         write_usage(0)
+        return 0
+    except Exception as e:
+        logger.error(f"Error reading usage file: {str(e)}", exc_info=True)
         return 0
 
 def write_usage(usage):
-    with open(usage_file, 'w') as file:
-        json.dump({'usage': usage}, file)
+    try:
+        with open(usage_file, 'w') as file:
+            json.dump({'usage': usage}, file)
+    except Exception as e:
+        logger.error(f"Error writing to usage file: {str(e)}", exc_info=True)
 
 usage = read_usage()
+
+async def send_critical_logs_to_discord():
+    """Send critical logs to Discord webhook every 24 hours and clear log file."""
+    global logger
+    await asyncio.sleep(60)  # Wait 60 seconds before first run to ensure bot is ready
+    
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            
+            if not DISCORD_LOG_WEBHOOK or not os.path.exists(log_file):
+                continue
+            
+            # Read log file
+            with open(log_file, 'r') as f:
+                log_contents = f.read()
+            
+            # Filter for CRITICAL logs only
+            critical_logs = [line for line in log_contents.split('\n') if 'CRITICAL' in line]
+            
+            if critical_logs:
+                # Format message for Discord (max 2000 chars per message)
+                critical_text = '\n'.join(critical_logs[-20:])  # Last 20 critical logs
+                if len(critical_text) > 1900:
+                    critical_text = critical_text[-1900:]
+                
+                message = f"```\n🚨 CRITICAL LOGS FROM LAST 24 HOURS\n\n{critical_text}\n```"
+                
+                # Send to webhook
+                async with aiohttp.ClientSession() as session:
+                    webhook_data = {
+                        'content': message,
+                        'username': 'CKC Bot Logger'
+                    }
+                    try:
+                        async with session.post(DISCORD_LOG_WEBHOOK, json=webhook_data, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                            if resp.status in [200, 204]:
+                                logger.info("Critical logs sent to Discord webhook successfully")
+                            else:
+                                logger.error(f"Webhook request failed with status {resp.status}")
+                    except asyncio.TimeoutError:
+                        logger.error("Webhook request timed out")
+                    except Exception as e:
+                        logger.error(f"Failed to send logs to webhook: {str(e)}")
+            
+            # Clear the log file
+            with open(log_file, 'w') as f:
+                f.write("")
+            logger.info("Log file cleared after webhook send")
+            
+        except Exception as e:
+            logger.error(f"Error in send_critical_logs_to_discord: {str(e)}", exc_info=True)
 
 async def reset_usage():
     global usage
@@ -95,7 +235,7 @@ async def reset_usage():
         await asyncio.sleep(sleep_time)
         usage = 0
         write_usage(usage)
-        print("Usage counter reset.")
+        logger.info("Usage counter reset.")
 
 async def check_disconnect():
     while True:
@@ -105,7 +245,7 @@ async def check_disconnect():
                 await asyncio.sleep(disconnect_time)
                 if len(voice_client.channel.members) == 1:
                     await voice_client.disconnect()
-                    print(f"Disconnected from {voice_client.channel} due to inactivity.")
+                    logger.info(f"Disconnected from {voice_client.channel} due to inactivity.")
 
 @tree.command(
     name='get-config',
@@ -203,11 +343,20 @@ async def settts(interaction: discord.Interaction):
 
                 selected_channel_id = int(select.values[0])
                 selected_channel = guild.get_channel(selected_channel_id)
+                logger.info(f"TTS channel set to {selected_channel.name} in {guild.name} by {interaction.user}")
                 await interaction.response.send_message(f"TTS channel set to {selected_channel.mention}", ephemeral=True)
                 await selected_channel.send("This channel has been set for TTS!")
-            except ValueError:
+            except ValueError as e:
+                logger.error(f"ValueError when setting TTS channel: {str(e)}")
                 await interaction.response.send_message("Invalid channel ID.", ephemeral=True)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse config.json when setting TTS channel: {str(e)}", exc_info=True)
+                await interaction.response.send_message("Error reading configuration. Please try again.", ephemeral=True)
+            except Exception as e:
+                logger.error(f"Error setting TTS channel: {str(e)}", exc_info=True)
+                await interaction.response.send_message("An error occurred. Please try again.", ephemeral=True)
         else:
+            logger.warning(f"Invalid channel ID selected: {selected_channel_id} in {guild.name}")
             await interaction.response.send_message("Invalid channel selected.", ephemeral=True)
 
     select.callback = wait_for_selection
@@ -245,7 +394,7 @@ async def set_voice(interaction: discord.Interaction):
 
     async def wait_for_selection(interaction):
         selected_voice = select.values[0]
-        print(selected_voice)
+        logger.debug(f"Voice selected: {selected_voice}")
         try:
             with open(config_file_path, 'r') as file:
                 config_data = json.load(file)
@@ -260,9 +409,17 @@ async def set_voice(interaction: discord.Interaction):
             with open(config_file_path, 'w') as file:
                 json.dump(config_data, file, indent=4)
 
+            logger.info(f"Voice set to {voice_dict[selected_voice]} in {guild.name} by {interaction.user}")
             await interaction.response.send_message(f"Voice set to "+voice_dict[selected_voice], ephemeral=True)
-        except ValueError:
+        except ValueError as e:
+            logger.error(f"ValueError when setting voice: {str(e)}")
             await interaction.response.send_message("Invalid voice selected.", ephemeral=True)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse config.json when setting voice: {str(e)}", exc_info=True)
+            await interaction.response.send_message("Error reading configuration. Please try again.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Error setting voice: {str(e)}", exc_info=True)
+            await interaction.response.send_message("An error occurred. Please try again.", ephemeral=True)
 
     select.callback = wait_for_selection
 
@@ -312,9 +469,17 @@ async def set_speech_rate(interaction: discord.Interaction):
             with open(config_file_path, 'w') as file:
                 json.dump(config_data, file, indent=4)
 
+            logger.info(f"Speech rate set to {selected_speech_rate} in {guild.name} by {interaction.user}")
             await interaction.response.send_message(f"Speech rate set to {selected_speech_rate}", ephemeral=True)
-        except ValueError:
+        except ValueError as e:
+            logger.error(f"ValueError when setting speech rate: {str(e)}")
             await interaction.response.send_message("Invalid speech rate selected.", ephemeral=True)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse config.json when setting speech rate: {str(e)}", exc_info=True)
+            await interaction.response.send_message("Error reading configuration. Please try again.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Error setting speech rate: {str(e)}", exc_info=True)
+            await interaction.response.send_message("An error occurred. Please try again.", ephemeral=True)
     
     select.callback = wait_for_selection
 
@@ -335,16 +500,26 @@ async def banfromtts(interaction: discord.Interaction):
     ])
     async def wait_for_selection(interaction):
         if not interaction.user.guild_permissions.administrator:
+            logger.warning(f"Non-admin user {interaction.user} attempted to ban from TTS in {guild.name}")
             await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
             return
         selected_user_id = int(select.values[0])
-        if "banned-user-ids" not in configData[str(guild.id)][0]:
-            configData[str(guild.id)][0]["banned-user-ids"] = [selected_user_id]
-        else:
-            configData[str(guild.id)][0]["banned-user-ids"].append(selected_user_id)
-        with open(config_file_path, 'w') as file:
-            json.dump(configData, file, indent=4)
-        await interaction.response.send_message(f"User banned from using TTS.", ephemeral=True)    
+        try:
+            selected_user = guild.get_member(selected_user_id)
+            if "banned-user-ids" not in configData[str(guild.id)][0]:
+                configData[str(guild.id)][0]["banned-user-ids"] = [selected_user_id]
+            else:
+                configData[str(guild.id)][0]["banned-user-ids"].append(selected_user_id)
+            with open(config_file_path, 'w') as file:
+                json.dump(configData, file, indent=4)
+            logger.warning(f"User {selected_user.name} (ID: {selected_user_id}) banned from TTS in {guild.name} by {interaction.user}")
+            await interaction.response.send_message(f"User banned from using TTS.", ephemeral=True)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse config.json when banning user: {str(e)}", exc_info=True)
+            await interaction.response.send_message("Error reading configuration. Please try again.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Error banning user: {str(e)}", exc_info=True)
+            await interaction.response.send_message("An error occurred. Please try again.", ephemeral=True)    
     select.callback = wait_for_selection
 
     view = discord.ui.View()
@@ -352,10 +527,15 @@ async def banfromtts(interaction: discord.Interaction):
     await interaction.response.send_message("Select a user to ban from using TTS:", view=view, ephemeral=True)
 @client.event
 async def on_ready():
-    print(f'{client.user} has connected to Discord!')
-    client.loop.create_task(reset_usage())
-    client.loop.create_task(check_disconnect())
+    logger.info(f'{client.user} has connected to Discord!')
+    t1 = client.loop.create_task(reset_usage())
+    t1.add_done_callback(_log_task_exceptions)
+    t2 = client.loop.create_task(check_disconnect())
+    t2.add_done_callback(_log_task_exceptions)
+    t3 = client.loop.create_task(send_critical_logs_to_discord())
+    t3.add_done_callback(_log_task_exceptions)
     await tree.sync()
+    logger.info("All background tasks started and command tree synced.")
 
 @tree.command(
     name="unbanfromtts",
@@ -373,13 +553,23 @@ async def unbanfromtts(interaction: discord.Interaction):
     ])
     async def wait_for_selection(interaction):
         if not interaction.user.guild_permissions.administrator:
+            logger.warning(f"Non-admin user {interaction.user} attempted to unban from TTS in {guild.name}")
             await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
             return
         selected_user_id = int(select.values[0])
-        configData[str(guild.id)][0]["banned-user-ids"].remove(selected_user_id)
-        with open(config_file_path, 'w') as file:
-            json.dump(configData, file, indent=4)
-        await interaction.response.send_message(f"User unbanned from using TTS.", ephemeral=True)    
+        try:
+            selected_user = guild.get_member(selected_user_id)
+            configData[str(guild.id)][0]["banned-user-ids"].remove(selected_user_id)
+            with open(config_file_path, 'w') as file:
+                json.dump(configData, file, indent=4)
+            logger.info(f"User {selected_user.name} (ID: {selected_user_id}) unbanned from TTS in {guild.name} by {interaction.user}")
+            await interaction.response.send_message(f"User unbanned from using TTS.", ephemeral=True)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse config.json when unbanning user: {str(e)}", exc_info=True)
+            await interaction.response.send_message("Error reading configuration. Please try again.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Error unbanning user: {str(e)}", exc_info=True)
+            await interaction.response.send_message("An error occurred. Please try again.", ephemeral=True)    
     select.callback = wait_for_selection
 
     view = discord.ui.View()
@@ -388,12 +578,18 @@ async def unbanfromtts(interaction: discord.Interaction):
 
 @client.event
 async def on_guild_remove(guild):
-    with open(config_file_path, 'r') as file:
-        config_data = json.load(file)
-    guild_id = str(guild.id)
-    config_data.pop(guild_id)
-    with open(config_file_path, 'w') as file:
-        json.dump(config_data, file, indent=4)
+    try:
+        with open(config_file_path, 'r') as file:
+            config_data = json.load(file)
+        guild_id = str(guild.id)
+        config_data.pop(guild_id, None)
+        with open(config_file_path, 'w') as file:
+            json.dump(config_data, file, indent=4)
+        logger.info(f"Bot removed from guild {guild.name} (ID: {guild_id}). Config cleaned up.")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse config.json on guild remove for {guild.name}: {str(e)}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Error on guild remove event for {guild.name}: {str(e)}", exc_info=True)
 
 
 @client.event
@@ -402,6 +598,8 @@ async def on_message(message):
 
     if message.author == client.user or not message.guild:
         return
+    
+    logger.debug(f"Message received from {message.author} in {message.guild.name}: {message.content[:50]}")
     
     if message.content == '$help':
         await message.channel.send("Hello! I am a TTS bot. You can use me to convert text to speech in the TTS channels. \n\n/settts - Set the TTS channel for your server. \n/help - get help regarding all commands \n/stop - stop the audio playback \n/limit - check the remaining character limit for the day \n/stop - stop a playing message midway \n/banfromtts - ban that irritating person from using the bot and spamming messages \n/unbanfromtts - unban banned people and let them use the bot \n/set-voice - change voice style of the bot \n/set-speech-rate - change the speech speed of the bot \n\nPlease note that the character limit is 1250000 characters per day across all servers.")
@@ -451,29 +649,49 @@ async def on_message(message):
     tts_channel_id = config_data[(str(message.guild.id))][0]["tts-channel-id"]
     # Check if the message is in a TTS channel before processing further
     if message.channel.id != tts_channel_id:
+        logger.debug(f"Message from {message.author} not in TTS channel, ignoring")
         return
 
     banned_user_ids = config_data[(str(message.guild.id))][0]["banned-user-ids"]
     if message.author.id in banned_user_ids:
+        logger.warning(f"Banned user {message.author} (ID: {message.author.id}) attempted to use TTS in {message.guild.name}")
         await message.channel.send("You have been banned from using the TTS bot.")
         return
 
     message_length = len(message.content)
     
     if message_length > max_message_length:
+        logger.warning(f"Message from {message.author} in {message.guild.name} exceeded length limit ({message_length} > {max_message_length})")
         await message.channel.send("Message is too long. Please limit your message to 200 characters.")
         return
     
     if usage + message_length > daily_limit:
+        logger.warning(f"Daily character limit reached in {message.guild.name}. Current usage: {usage}, requested: {message_length}")
         await message.channel.send("Daily character limit reached. Try again tomorrow.")
         return
     
     usage += message_length
     write_usage(usage)
+    logger.info(f"TTS synthesis requested by {message.author} in {message.guild.name}. Characters: {message_length}, Total usage: {usage}")
     content = message.content
     for user in message.mentions:
         content = content.replace(f'<@{user.id}>', user.name)
-    api.tts(content, message.guild.id)
+    
+    # Call TTS API with error handling
+    try:
+        api.tts(content, message.guild.id)
+    except ValueError as e:
+        logger.error(f"Invalid TTS request from {message.author} in {message.guild.name}: {str(e)}")
+        await message.channel.send("Error: Invalid TTS request. Please check the configuration.")
+        return
+    except KeyError as e:
+        logger.error(f"Guild configuration missing for {message.guild.name}: {str(e)}")
+        await message.channel.send("Error: Guild not properly configured. Please run /settts first.")
+        return
+    except Exception as e:
+        logger.error(f"TTS API error for {message.author} in {message.guild.name}: {str(e)}", exc_info=True)
+        await message.channel.send("Error: Failed to generate TTS audio. Please try again later.")
+        return
 
     voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
     
@@ -487,7 +705,7 @@ async def on_message(message):
         if os.path.exists("messageOutput/output.mp3"): 
             audio_source = FFmpegPCMAudio("messageOutput/output.mp3")
             if not voice_client.is_playing():
-                voice_client.play(audio_source, after=lambda e: print('Player error: %s' % e) if e else None)
+                voice_client.play(audio_source, after=lambda e: logger.error(f'Player error: {e}') if e else None)
             else:
                 await message.channel.send("Already playing audio. Please wait for the current audio to finish.")
         else:
