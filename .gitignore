@@ -8,3 +8,4 @@ config.json
 /output
 .github
 ytlink_to_mp3.py
+*.log
