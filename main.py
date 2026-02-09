@@ -80,6 +80,50 @@ def _log_task_exceptions(task: asyncio.Task):
     if exc:
         logger.error("Unhandled task exception", exc_info=(type(exc), exc, exc.__traceback__))
 
+# Voice connection state tracking per guild (fixes WebSocket 4006 race condition)
+# States: "idle" (not connected), "connecting" (handshake in progress), "playing" (audio playing)
+voice_connection_states = {}  # {guild_id: {"state": str, "last_activity": datetime}}
+VOICE_STATE_IDLE = "idle"
+VOICE_STATE_CONNECTING = "connecting"
+VOICE_STATE_PLAYING = "playing"
+INACTIVITY_TIMEOUT = 30  # Increased from 2 seconds; allows 3-5s cloud handshake + buffer
+
+def get_voice_state(guild_id):
+    """Get voice state for a guild, defaulting to idle."""
+    return voice_connection_states.get(guild_id, {
+        "state": VOICE_STATE_IDLE,
+        "last_activity": datetime.now()
+    })
+
+def set_voice_state(guild_id, state):
+    """Set voice state for a guild with timestamp."""
+    voice_connection_states[guild_id] = {
+        "state": state,
+        "last_activity": datetime.now()
+    }
+
+async def safe_disconnect_after_playback(guild_id, voice_client):
+    """Safely disconnect after playback finishes using inactivity timer.
+    Prevents disconnects during handshake and honors cloud latency (3-5s).
+    """
+    try:
+        logger.debug(f"Playback finished for guild {guild_id}, starting {INACTIVITY_TIMEOUT}s inactivity timer")
+        set_voice_state(guild_id, VOICE_STATE_IDLE)
+        
+        # Wait for inactivity timeout
+        await asyncio.sleep(INACTIVITY_TIMEOUT)
+        
+        # Check if still idle (no new audio started during timeout)
+        current_state = get_voice_state(guild_id)
+        if current_state.get("state") == VOICE_STATE_IDLE and voice_client and voice_client.is_connected():
+            logger.info(f"Disconnecting from {voice_client.channel} in {voice_client.guild.name} after {INACTIVITY_TIMEOUT}s inactivity")
+            await voice_client.disconnect()
+            voice_connection_states.pop(guild_id, None)
+        else:
+            logger.debug(f"Voice activity resumed for guild {guild_id}, aborting auto-disconnect")
+    except Exception as e:
+        logger.error(f"Error in safe_disconnect_after_playback for guild {guild_id}: {str(e)}", exc_info=True)
+
 daily_limit = 1250000  
 max_message_length = 200 
 disconnect_time = 2  # 2 seconds
@@ -238,14 +282,44 @@ async def reset_usage():
         logger.info("Usage counter reset.")
 
 async def check_disconnect():
+    """Monitor voice connections and disconnect only when safe.
+    Never disconnects during connecting/playing states or while audio is playing.
+    Uses inactivity timeout to prevent race conditions with voice handshake.
+    """
     while True:
-        await asyncio.sleep(10) 
-        for voice_client in client.voice_clients:
-            if len(voice_client.channel.members) == 1:  
-                await asyncio.sleep(disconnect_time)
+        try:
+            await asyncio.sleep(15)  # Check every 15 seconds
+            
+            for voice_client in client.voice_clients:
+                guild_id = voice_client.guild.id
+                state = get_voice_state(guild_id)
+                
+                # NEVER disconnect if connecting or playing
+                if state.get("state") in [VOICE_STATE_CONNECTING, VOICE_STATE_PLAYING]:
+                    logger.debug(f"Guild {guild_id} is {state.get('state')}, skipping disconnect check")
+                    continue
+                
+                # NEVER disconnect if audio is currently playing
+                if voice_client.is_playing():
+                    logger.debug(f"Guild {guild_id} is playing audio, updating state")
+                    set_voice_state(guild_id, VOICE_STATE_PLAYING)
+                    continue
+                
+                # Disconnect only if idle and bot is alone, respecting inactivity timeout
                 if len(voice_client.channel.members) == 1:
-                    await voice_client.disconnect()
-                    logger.info(f"Disconnected from {voice_client.channel} due to inactivity.")
+                    time_since_activity = (datetime.now() - state.get("last_activity", datetime.now())).total_seconds()
+                    
+                    if time_since_activity >= INACTIVITY_TIMEOUT:
+                        logger.info(f"Disconnecting from {voice_client.channel} in {voice_client.guild.name} due to {time_since_activity:.1f}s inactivity")
+                        try:
+                            await voice_client.disconnect()
+                            voice_connection_states.pop(guild_id, None)
+                        except Exception as e:
+                            logger.error(f"Error disconnecting from guild {guild_id}: {str(e)}", exc_info=True)
+                    else:
+                        logger.debug(f"Guild {guild_id}: inactivity timer {time_since_activity:.1f}s / {INACTIVITY_TIMEOUT}s")
+        except Exception as e:
+            logger.error(f"Error in check_disconnect loop: {str(e)}", exc_info=True)
 
 @tree.command(
     name='get-config',
@@ -697,15 +771,58 @@ async def on_message(message):
     
     if message.author.voice:
         vc = message.author.voice.channel
-        if not voice_client:
-            voice_client = await vc.connect()
-        elif voice_client.channel != vc:
-            await voice_client.move_to(vc)
         
-        if os.path.exists("messageOutput/output.mp3"): 
-            audio_source = FFmpegPCMAudio("messageOutput/output.mp3")
+        # Only connect if not already connected; prevent concurrent connects
+        if not voice_client:
+            set_voice_state(message.guild.id, VOICE_STATE_CONNECTING)
+            try:
+                voice_client = await asyncio.wait_for(vc.connect(), timeout=10.0)
+                logger.debug(f"Successfully connected to {vc.name} in {message.guild.name}")
+            except asyncio.TimeoutError:
+                logger.error(f"Voice connection timeout to {vc.name} in {message.guild.name}")
+                await message.channel.send("Error: Voice connection timed out. Please try again.")
+                set_voice_state(message.guild.id, VOICE_STATE_IDLE)
+                return
+            except Exception as e:
+                logger.error(f"Failed to connect to voice channel {vc.name}: {str(e)}", exc_info=True)
+                await message.channel.send("Error: Failed to connect to voice channel.")
+                set_voice_state(message.guild.id, VOICE_STATE_IDLE)
+                return
+        elif voice_client.channel != vc:
+            # Move to different channel
+            try:
+                await voice_client.move_to(vc)
+                logger.debug(f"Moved bot to {vc.name} in {message.guild.name}")
+            except Exception as e:
+                logger.error(f"Failed to move to voice channel {vc.name}: {str(e)}", exc_info=True)
+                await message.channel.send("Error: Failed to move to voice channel.")
+                return
+        
+        # Play audio only after connection is fully established
+        if os.path.exists("messageOutput/output.mp3"):
             if not voice_client.is_playing():
-                voice_client.play(audio_source, after=lambda e: logger.error(f'Player error: {e}') if e else None)
+                try:
+                    set_voice_state(message.guild.id, VOICE_STATE_PLAYING)
+                    audio_source = FFmpegPCMAudio("messageOutput/output.mp3")
+                    
+                    # Safe disconnect callback using asyncio.run_coroutine_threadsafe
+                    # Ensures disconnect respects inactivity timeout and doesn't interrupt handshake
+                    def on_playback_finish(error):
+                        if error:
+                            logger.error(f"Player error: {error}")
+                        guild_id = message.guild.id
+                        # Schedule safe disconnect in the event loop using coroutine-safe method
+                        asyncio.run_coroutine_threadsafe(
+                            safe_disconnect_after_playback(guild_id, voice_client),
+                            client.loop
+                        )
+                    
+                    voice_client.play(audio_source, after=on_playback_finish)
+                    logger.info(f"Started playing audio in {message.guild.name}")
+                except Exception as e:
+                    logger.error(f"Error playing audio: {str(e)}", exc_info=True)
+                    await message.channel.send("Error: Failed to play audio.")
+                    set_voice_state(message.guild.id, VOICE_STATE_IDLE)
             else:
                 await message.channel.send("Already playing audio. Please wait for the current audio to finish.")
         else:
@@ -715,11 +832,20 @@ async def on_message(message):
 
 @client.event
 async def on_voice_state_update(member, before, after):
-    if member == client.user and before.channel and not after.channel:
-        return
-
-    if after.channel and client.user in [member for member in after.channel.members]:
-        voice_client = discord.utils.get(client.voice_clients, guild=member.guild)
-        if voice_client and len(after.channel.members) == 1:
-            await voice_client.disconnect()
+    """Track voice state changes.
+    
+    IMPORTANT: Never disconnect based on member presence alone.
+    Disconnects are now handled safely by check_disconnect() and playback callbacks.
+    This prevents race conditions with voice handshake (WebSocket 4006 errors).
+    """
+    if member == client.user:
+        # Only log bot voice state changes for debugging
+        if before.channel and not after.channel:
+            logger.info(f"Bot disconnected from {before.channel.name} in {member.guild.name}")
+            voice_connection_states.pop(member.guild.id, None)
+        elif after.channel:
+            logger.debug(f"Bot voice state changed in {after.channel.name} ({member.guild.name})")
+    
+    # Do NOT auto-disconnect based on other members leaving or joining
+    # Disconnect responsibility is now with check_disconnect() and playback callbacks
 client.run(TOKEN)
