@@ -227,25 +227,45 @@ async def send_critical_logs_to_discord():
         try:
             await asyncio.sleep(86400)  # 24 hours
             
-            if not DISCORD_LOG_WEBHOOK or not os.path.exists(log_file):
+            logger.debug("Webhook task triggered: checking conditions for log send")
+            
+            # Validate webhook URL
+            if not DISCORD_LOG_WEBHOOK:
+                logger.warning("Webhook task: DISCORD_LOG_WEBHOOK env var is not set or empty")
                 continue
+            
+            # Validate log file exists
+            if not os.path.exists(log_file):
+                logger.warning(f"Webhook task: log file '{log_file}' does not exist")
+                continue
+            
+            logger.debug(f"Webhook task: reading from {log_file}")
             
             # Read log file
             with open(log_file, 'r') as f:
                 log_contents = f.read()
             
+            log_size = len(log_contents)
+            logger.debug(f"Webhook task: log file size is {log_size} bytes")
+            
             # Filter for CRITICAL logs only
             critical_logs = [line for line in log_contents.split('\n') if 'CRITICAL' in line]
+            critical_count = len(critical_logs)
+            logger.debug(f"Webhook task: found {critical_count} CRITICAL log lines")
             
-            if critical_logs:
+            if not critical_logs:
+                logger.info("Webhook task: no CRITICAL logs found, skipping webhook send")
+            else:
                 # Format message for Discord (max 2000 chars per message)
                 critical_text = '\n'.join(critical_logs[-20:])  # Last 20 critical logs
                 if len(critical_text) > 1900:
                     critical_text = critical_text[-1900:]
                 
                 message = f"```\n🚨 CRITICAL LOGS FROM LAST 24 HOURS\n\n{critical_text}\n```"
+                logger.debug(f"Webhook task: formatted message length {len(message)} chars")
                 
                 # Send to webhook
+                logger.debug(f"Webhook task: posting to webhook URL (first 30 chars): {DISCORD_LOG_WEBHOOK[:30]}...")
                 async with aiohttp.ClientSession() as session:
                     webhook_data = {
                         'content': message,
@@ -254,18 +274,23 @@ async def send_critical_logs_to_discord():
                     try:
                         async with session.post(DISCORD_LOG_WEBHOOK, json=webhook_data, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                             if resp.status in [200, 204]:
-                                logger.info("Critical logs sent to Discord webhook successfully")
+                                logger.info(f"Critical logs sent to Discord webhook successfully (status {resp.status})")
                             else:
                                 logger.error(f"Webhook request failed with status {resp.status}")
+                                response_text = await resp.text()
+                                logger.error(f"Webhook response: {response_text[:200]}")
                     except asyncio.TimeoutError:
-                        logger.error("Webhook request timed out")
+                        logger.error("Webhook request timed out after 10 seconds")
+                    except aiohttp.ClientConnectorError as e:
+                        logger.error(f"Webhook connection error (network/DNS issue): {str(e)}")
                     except Exception as e:
-                        logger.error(f"Failed to send logs to webhook: {str(e)}")
+                        logger.error(f"Failed to send logs to webhook: {str(e)}", exc_info=True)
             
             # Clear the log file
+            logger.debug("Webhook task: clearing log file")
             with open(log_file, 'w') as f:
                 f.write("")
-            logger.info("Log file cleared after webhook send")
+            logger.info("Log file cleared after webhook task cycle")
             
         except Exception as e:
             logger.error(f"Error in send_critical_logs_to_discord: {str(e)}", exc_info=True)
@@ -778,6 +803,10 @@ async def on_message(message):
             try:
                 voice_client = await asyncio.wait_for(vc.connect(), timeout=10.0)
                 logger.debug(f"Successfully connected to {vc.name} in {message.guild.name}")
+                # Wait for voice handshake to fully complete (especially important on cloud VMs with 3-5s latency)
+                logger.debug("Waiting 1s for voice handshake to complete...")
+                await asyncio.sleep(1.0)
+                logger.debug("Voice handshake should be complete, proceeding to playback")
             except asyncio.TimeoutError:
                 logger.error(f"Voice connection timeout to {vc.name} in {message.guild.name}")
                 await message.channel.send("Error: Voice connection timed out. Please try again.")
