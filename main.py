@@ -804,9 +804,16 @@ async def on_message(message):
                 voice_client = await asyncio.wait_for(vc.connect(), timeout=10.0)
                 logger.debug(f"Successfully connected to {vc.name} in {message.guild.name}")
                 # Wait for voice handshake to fully complete (especially important on cloud VMs with 3-5s latency)
-                logger.debug("Waiting 1s for voice handshake to complete...")
-                await asyncio.sleep(1.0)
-                logger.debug("Voice handshake should be complete, proceeding to playback")
+                logger.debug("Waiting for voice handshake to complete (up to 10s)...")
+                deadline = asyncio.get_event_loop().time() + 10.0
+                while not voice_client.is_connected():
+                    if asyncio.get_event_loop().time() > deadline:
+                        logger.error(f"Voice connection did not become ready within timeout for {vc.name}")
+                        await message.channel.send("Error: Voice connection timed out. Please try again.")
+                        set_voice_state(message.guild.id, VOICE_STATE_IDLE)
+                        return
+                    await asyncio.sleep(0.5)
+                logger.debug("Voice handshake complete, proceeding to playback")
             except asyncio.TimeoutError:
                 logger.error(f"Voice connection timeout to {vc.name} in {message.guild.name}")
                 await message.channel.send("Error: Voice connection timed out. Please try again.")
