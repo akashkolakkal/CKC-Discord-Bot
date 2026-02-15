@@ -801,11 +801,11 @@ async def on_message(message):
         if not voice_client:
             set_voice_state(message.guild.id, VOICE_STATE_CONNECTING)
             try:
-                voice_client = await asyncio.wait_for(vc.connect(), timeout=10.0)
+                voice_client = await asyncio.wait_for(vc.connect(), timeout=15.0)
                 logger.debug(f"Successfully connected to {vc.name} in {message.guild.name}")
-                # Wait for voice handshake to fully complete (especially important on cloud VMs with 3-5s latency)
-                logger.debug("Waiting for voice handshake to complete (up to 10s)...")
-                deadline = asyncio.get_event_loop().time() + 10.0
+                # Wait for voice handshake to fully complete (cloud VMs may need more time)
+                logger.debug("Waiting for voice handshake to complete (up to 15s)...")
+                deadline = asyncio.get_event_loop().time() + 15.0
                 while not voice_client.is_connected():
                     if asyncio.get_event_loop().time() > deadline:
                         logger.error(f"Voice connection did not become ready within timeout for {vc.name}")
@@ -813,7 +813,14 @@ async def on_message(message):
                         set_voice_state(message.guild.id, VOICE_STATE_IDLE)
                         return
                     await asyncio.sleep(0.5)
-                logger.debug("Voice handshake complete, proceeding to playback")
+                # Re-fetch the voice client in case the underlying instance was replaced
+                logger.debug("Voice handshake complete, re-fetching voice client before playback")
+                voice_client = discord.utils.get(client.voice_clients, guild=message.guild)
+                if not voice_client or not voice_client.is_connected():
+                    logger.error(f"Voice client not connected after handshake for {vc.name}")
+                    await message.channel.send("Error: Voice client disconnected unexpectedly. Please try again.")
+                    set_voice_state(message.guild.id, VOICE_STATE_IDLE)
+                    return
             except asyncio.TimeoutError:
                 logger.error(f"Voice connection timeout to {vc.name} in {message.guild.name}")
                 await message.channel.send("Error: Voice connection timed out. Please try again.")
